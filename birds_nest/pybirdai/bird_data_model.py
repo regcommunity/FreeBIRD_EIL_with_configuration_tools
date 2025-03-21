@@ -1,4 +1,5 @@
 from django.db import models
+from pybirdai.annotations.decorators import lineage
 
 class ASST_PL(models.Model):
 
@@ -7469,6 +7470,17 @@ class INSTRMNT_RL(models.Model):
 	theINSTRMNT = models.ForeignKey("INSTRMNT", models.SET_NULL,blank=True,null=True,related_name="INSTRMNT_RL_to_theINSTRMNTs")
 
 	@property
+	@lineage(dependencies={"INSTRMNT_RL.PRFRMNG_STTS",
+		"INSTRMNT_RL.ACCNTNG_CLSSFCTN",
+		"INSTRMNT_RL.ACCMLTD_IMPRMNT",
+		"INSTRMNT_RL.CRRYNG_AMNT",
+		"INSTRMNT_RL.IMPRMNT_STTS",
+		"INSTRMNT_RL.BLNC_SHT_RCGNSD_FNCL_ASST_INSTRMNT_FR_VL_TYP",
+		"INSTRMNT_RL.ACCMLTD_CHNGS_FV",
+		"INSTRMNT_RL.FV",
+		"INSTRMNT_RL.GNRL_ALLWNCS_BNK_RSK",
+		"INSTRMNT_RL.GNRL_ALLWNCS_CRDT_RSK",
+		"INSTRMNT_RL.SBJCT_IMPRMNT_INDCTR"})
 	def GRSS_CRRYNG_AMNT(self):
 		accntng_clssfctn = None
 		accmltd_imprmnt = 0

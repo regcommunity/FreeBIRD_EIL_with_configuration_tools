@@ -182,6 +182,9 @@ class F_05_01_REF_FINREP_3_0_Loans_and_advances_Table:
 	CLLTRL_Table = None # CLLTRL
 	INSTRMNT_ENTTY_RL_ASSGNMNT_Table = None # INSTRMNT_ENTTY_RL_ASSGNMNT
 	Loans_and_advancess = []# Loans_and_advances[]
+	@lineage(dependencies={"INSTRMNT_RL.theINSTRMNT",
+							"INSTRMNT.TYP_INSTRMNT",
+							"INSTRMNT_ENTTY_RL_ASSGNMNT.theINSTRMNT"})
 	def calc_Loans_and_advancess(self) :
 		items = [] # Loans_and_advances[
 		# Join up any refered tables that you need to join
