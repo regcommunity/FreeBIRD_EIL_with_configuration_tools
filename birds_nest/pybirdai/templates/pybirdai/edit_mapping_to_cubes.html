@@ -1,0 +1,319 @@
+<!--
+# Copyright (c) 2024 Bird Software Solutions Ltd
+# This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License 2.0
+# which accompanies this distribution, and is available at
+# https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+# Contributors:
+#    Neil Mackenzie - initial API and implementation
+-->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Edit Mapping to Cubes</h1>
+<a href="{% url 'pybirdai:review_semantic_integrations'%}">Back to Review Semantic Integrations</a>
+
+
+
+<!-- Add filter form -->
+<form method="get" class="filter-form">
+    <div class="filter-container">
+        <div class="filter-item">
+            <label for="mapping_filter">Mapping Definition:</label>
+            <select name="mapping_filter" id="mapping_filter">
+                <option value="">All</option>
+                {% for mapping_id in mapping_definitions %}
+                    <option value="{{ mapping_id.mapping_id }}" {% if mapping_id.mapping_id|stringformat:"s" == request.GET.mapping_filter %}selected{% endif %}>
+                        {{ mapping_id.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-item">
+            <label for="cube_filter">Cube Mapping:</label>
+            <select name="cube_filter" id="cube_filter">
+                <option value="">All</option>
+                {% for cube in cube_mappings %}
+                    <option value="{{ cube }}" {% if cube|stringformat:"s" == request.GET.cube_filter %}selected{% endif %}>
+                        {{ cube }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">Apply Filters</button>
+    </div>
+</form>
+<!-- Create New Mapping to Cube Form -->
+<div class="create-new-section">
+    <h2>Create New Mapping to Cube</h2>
+    <form method="post" action="{% url 'pybirdai:create_mapping_to_cube' %}" class="create-form">
+        {% csrf_token %}
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="new_mapping">Mapping Definition:</label>
+                <select name="mapping_id" id="new_mapping" required>
+                    <option value="">Select Mapping</option>
+                    {% for mapping_id in mapping_definitions %}
+                        <option value="{{ mapping_id.mapping_id }}">{{ mapping_id.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="new_cube_mapping">Cube Mapping:</label>
+                <select name="cube_mapping_id" id="new_cube_mapping" required>
+                    <option value="">Select Cube</option>
+                    {% for cube in cube_mappings %}
+                        <option value="{{ cube }}">{{ cube }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="new_valid_from">Valid From:</label>
+                <input type="date" name="valid_from" id="new_valid_from" required>
+            </div>
+            <div class="form-group">
+                <label for="new_valid_to">Valid To:</label>
+                <input type="date" name="valid_to" id="new_valid_to">
+            </div>
+        </div>
+        <button type="submit" class="create-button">Create New Mapping</button>
+    </form>
+</div>
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Mapping Definition</th>
+                    <th>Cube Mapping</th>
+                    <th>Valid From</th>
+                    <th>Valid To</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for form in formset %}
+                {{ form.id }}
+                <tr>
+                    <td>
+                        {{ form.mapping_id }}
+                        <input type="hidden" id="mapping_id_{{ form.instance.id }}" value="{{ form.instance.mapping_id.mapping_id }}">
+                    </td>
+                    <td>
+                        {{ form.cube_mapping_id }}
+                        <input type="hidden" id="cube_mapping_id_{{ form.instance.id }}" value="{{ form.instance.cube_mapping_id }}">
+                    </td>
+                    <td>{{ form.valid_from }}</td>
+                    <td>{{ form.valid_to }}</td>
+                    <td>
+                        <button type="button" onclick="confirmDelete('{{ form.instance.id }}')">Delete</button>
+                    </td>
+                </tr>
+                {% if form.errors %}
+                <tr>
+                    <td colspan="5">
+                        {{ form.errors }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <button type="submit">Save Changes</button>
+</form>
+
+<!-- Pagination -->
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; first</a>
+            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+
+<script>
+function confirmDelete(mappingToCubeId) {
+    if (confirm('Are you sure you want to delete this mapping to cube entry?')) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{% url 'pybirdai:delete_mapping_to_cube' 0 %}".replace('0', mappingToCubeId);
+        
+        // Add CSRF token
+        var csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        
+        // Add mapping_id
+        var mappingInput = document.createElement('input');
+        mappingInput.type = 'hidden';
+        mappingInput.name = 'mapping_id';
+        mappingInput.value = document.getElementById('mapping_id_' + mappingToCubeId).value;
+        form.appendChild(mappingInput);
+        
+        // Add cube_mapping_id
+        var cubeInput = document.createElement('input');
+        cubeInput.type = 'hidden';
+        cubeInput.name = 'cube_mapping_id';
+        cubeInput.value = document.getElementById('cube_mapping_id_' + mappingToCubeId).value;
+        form.appendChild(cubeInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        margin-bottom: 1em;
+    }
+    
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 800px;
+    }
+    
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    
+    th {
+        background-color: #f2f2f2;
+        position: sticky;
+        top: 0;
+    }
+    
+    .pagination {
+        margin-top: 20px;
+    }
+    
+    .filter-form {
+        margin: 20px 0;
+        width: 100%;
+    }
+    
+    .filter-container {
+        display: flex;
+        flex-wrap: wrap;  /* Allow wrapping */
+        gap: 15px;
+        width: 100%;
+        padding: 10px;
+        background-color: #f8f8f8;
+        border-radius: 4px;
+    }
+    
+    .filter-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 200px;
+    }
+    
+    .filter-form select {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 100%;
+    }
+
+    .filter-form button {
+        height: 35px;
+        padding: 0 20px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        align-self: flex-end;
+        margin-top: auto;  /* Push button to bottom */
+    }
+
+    .filter-form button:hover {
+        background-color: #0056b3;
+    }
+
+    /* Styles for Create New section */
+    .create-new-section {
+        background-color: #f8f8f8;
+        padding: 20px;
+        border-radius: 4px;
+        margin: 20px 0;
+    }
+
+    .create-new-section h2 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 1.5em;
+    }
+
+    .create-form .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .form-group label {
+        font-weight: bold;
+    }
+
+    .form-group select,
+    .form-group input {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        width: 100%;
+    }
+
+    .create-button {
+        background-color: #28a745;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+    }
+
+    .create-button:hover {
+        background-color: #218838;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,395 @@
+<!--
+# Copyright (c) 2024 Bird Software Solutions Ltd
+# This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License 2.0
+# which accompanies this distribution, and is available at
+# https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+# Contributors:
+#    Neil Mackenzie - initial API and implementation
+-->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Edit Member Mapping Items</h1>
+<a href="{% url 'pybirdai:review_semantic_integrations'%}">Back to Review Semantic Integrations</a>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<!-- Add filter form -->
+<div class="filters">
+    <form method="get" class="filter-form">
+        <div class="filters">
+            <div class="filter-group">
+                <label for="member_mapping_id">Member Mapping:</label>
+                <select name="member_mapping_id" id="member_mapping_id">
+                    <option value="">All</option>
+                    {% for mapping_id in member_mappings %}
+                    <option value="{{ mapping_id }}" {% if selected_member_mapping == mapping_id %}selected{% endif %}>{{ mapping_id }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="member_id">Member:</label>
+                <select name="member_id" id="member_id">
+                    <option value="">All</option>
+                    {% for member_id in members %}
+                    <option value="{{ member_id }}" {% if selected_member == member_id %}selected{% endif %}>{{ member_id }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="variable_id">Variable:</label>
+                <select name="variable_id" id="variable_id">
+                    <option value="">All</option>
+                    {% for var in variables %}
+                    <option value="{{ var }}" {% if selected_variable == var %}selected{% endif %}>{{ var }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="is_source">Is Source:</label>
+                <select name="is_source" id="is_source">
+                    <option value="">All</option>
+                    <option value="True" {% if selected_is_source == 'True' %}selected{% endif %}>Yes</option>
+                    <option value="False" {% if selected_is_source == 'False' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+            <button type="submit" class="filter-button">Apply Filters</button>
+            <a href="{% url 'pybirdai:edit_member_mapping_items' %}" class="clear-button">Clear Filters</a>
+        </div>
+    </form>
+</div>
+
+<!-- Add New Button -->
+<div class="add-new-section">
+    <button type="button" onclick="showAddForm()" class="add-button">Add New Member Mapping Item</button>
+</div>
+
+<!-- Add New Form (Hidden by default) -->
+<div id="addMemberMappingItemForm" class="add-form" style="display: none;">
+    <form method="post" action="{% url 'pybirdai:add_member_mapping_item' %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="is_source">Is Source:</label>
+            <select name="is_source" id="is_source" required>
+                <option value="True">Yes</option>
+                <option value="False">No</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="member_id">Member:</label>
+            <select name="member_id" id="member_id" required>
+                <option value="">Select Member</option>
+                {% for member in all_members %}
+                <option value="{{ member.member_id }}">{{ member.member_id }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="variable_id">Variable:</label>
+            <select name="variable_id" id="variable_id" required>
+                <option value="">Select Variable</option>
+                {% for variable in all_variables %}
+                <option value="{{ variable.variable_id }}">{{ variable.variable_id }} - {{ variable.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="member_mapping_row">Row:</label>
+            <input type="number" name="member_mapping_row" id="member_mapping_row" required>
+        </div>
+        <div class="form-group">
+            <label for="member_mapping_id">Member Mapping:</label>
+            <select name="member_mapping_id" id="member_mapping_id" required>
+                <option value="">Select Member Mapping</option>
+                {% for mapping_id in all_member_mappings %}
+                <option value="{{ mapping_id.member_mapping_id }}">{{ mapping_id.member_mapping_id }} - {{ mapping_id.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="member_hierarchy">Member Hierarchy:</label>
+            <select name="member_hierarchy" id="member_hierarchy">
+                <option value="">Select Member Hierarchy</option>
+                {% for hierarchy in all_member_hierarchies %}
+                <option value="{{ hierarchy.member_hierarchy_id }}">{{ hierarchy.member_hierarchy_id }} - {{ hierarchy.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="valid_from">Valid From:</label>
+            <input type="date" name="valid_from" id="valid_from">
+        </div>
+        <div class="form-group">
+            <label for="valid_to">Valid To:</label>
+            <input type="date" name="valid_to" id="valid_to">
+        </div>
+        <button type="submit" class="submit-button">Create Item</button>
+        <button type="button" onclick="hideAddForm()" class="cancel-button">Cancel</button>
+    </form>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Is Source</th>
+                    <th>Member</th>
+                    <th>Variable</th>
+                    <th>Row</th>
+                    <th>Member Mapping</th>
+                    <th>Member Hierarchy</th>
+                    <th>Valid From</th>
+                    <th>Valid To</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for form in formset %}
+                <!-- Debug info -->
+                <!-- Member Mapping Item values: 
+                     member_mapping_id: {{ form.instance.member_mapping_id }}
+                     member_id: {{ form.instance.member_id }}
+                     variable_id: {{ form.instance.variable_id }}
+                     is_source: {{ form.instance.is_source }}
+                     member_mapping_row: {{ form.instance.member_mapping_row }} -->
+                {{ form.id }}
+                <tr>
+                    <td>{{ form.is_source }}</td>
+                    <td>{{ form.member_id }}</td>
+                    <td>{{ form.variable_id }}</td>
+                    <td>{{ form.member_mapping_row }}</td>
+                    <td>{{ form.member_mapping_id }}</td>
+                    <td>{{ form.member_hierarchy }}</td>
+                    <td>{{ form.valid_from }}</td>
+                    <td>{{ form.valid_to }}</td>
+                    <td>
+                        <button type="button" onclick="confirmDelete('{{ form.instance.member_mapping_id.member_mapping_id }}', '{{ form.instance.member_id.member_id }}', '{{ form.instance.variable_id.variable_id }}', '{{ form.instance.is_source }}', '{{ form.instance.member_mapping_row }}')">Delete</button>
+                    </td>
+                </tr>
+                {% if form.errors %}
+                <tr>
+                    <td colspan="9">
+                        {{ form.errors }}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <button type="submit">Save Changes</button>
+</form>
+
+<!-- Pagination -->
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; first</a>
+            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+
+<script>
+function confirmDelete(memberMappingId, memberId, variableId, isSource, memberMappingRow) {
+    if (confirm('Are you sure you want to delete this member mapping item?')) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{% url 'pybirdai:delete_member_mapping_item' 0 %}?member_mapping_id=" + encodeURIComponent(memberMappingId) + 
+                     "&member_id=" + encodeURIComponent(memberId) + 
+                     "&variable_id=" + encodeURIComponent(variableId) + 
+                     "&is_source=" + encodeURIComponent(isSource) + 
+                     "&member_mapping_row=" + encodeURIComponent(memberMappingRow);
+        var csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function showAddForm() {
+    document.getElementById('addMemberMappingItemForm').style.display = 'block';
+}
+
+function hideAddForm() {
+    document.getElementById('addMemberMappingItemForm').style.display = 'none';
+}
+</script>
+
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        margin-bottom: 1em;
+    }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 1200px; /* Adjust this value based on your table's content */
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    th {
+        background-color: #f2f2f2;
+        position: sticky;
+        top: 0;
+    }
+    .pagination {
+        margin-top: 20px;
+    }
+    .filters {
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    
+    .filters form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        align-items: flex-end;
+    }
+    
+    .filters label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    
+    .filters select {
+        padding: 6px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        min-width: 200px;
+    }
+    
+    .filter-button, .clear-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .filter-button {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .clear-button {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .filter-button:hover {
+        background-color: #0056b3;
+    }
+    
+    .clear-button:hover {
+        background-color: #5a6268;
+    }
+
+    .add-new-section {
+        margin: 20px 0;
+    }
+
+    .add-button {
+        background-color: #28a745;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .add-button:hover {
+        background-color: #218838;
+    }
+
+    .add-form {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 5px;
+        margin: 20px 0;
+        max-width: 500px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+    }
+
+    .form-group input[type="checkbox"] {
+        width: auto;
+    }
+
+    .submit-button {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+
+    .cancel-button {
+        background-color: #6c757d;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .submit-button:hover {
+        background-color: #0056b3;
+    }
+
+    .cancel-button:hover {
+        background-color: #5a6268;
+    }
+</style>
+{% endblock %}

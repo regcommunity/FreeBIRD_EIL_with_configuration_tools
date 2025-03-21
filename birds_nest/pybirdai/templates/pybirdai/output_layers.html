@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Output Layers</h1>
+<a href="{% url 'pybirdai:review_filters' %}">Back to Review Filters</a>
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Maintenance Agency</th>
+                <th>Cube ID</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Valid From</th>
+                <th>Valid To</th>
+                <th>Version</th>
+                <th>Cube Type</th>
+                <th>Cube Structure ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for form in formset %}
+            <tr>
+                <td>{{ form.instance.maintenance_agency_id }}</td>
+                <td>{{ form.instance.cube_id }}</td>
+                <td>{{ form.instance.code }}</td>
+                <td>{{ form.instance.name }}</td>
+                <td>{{ form.instance.description }}</td>
+                <td>{{ form.instance.valid_from }}</td>
+                <td>{{ form.instance.valid_to }}</td>
+                <td>{{ form.instance.version }}</td>
+                <td>{{ form.instance.cube_type }}</td>
+                <td>{{ form.instance.cube_structure_id }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; first</a>
+            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        margin-bottom: 1em;
+    }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 2000px; /* Set minimum width to ensure horizontal scroll */
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    th {
+        background-color: #f2f2f2;
+        position: sticky;
+        top: 0;
+    }
+    .pagination {
+        margin-top: 20px;
+    }
+</style>
+{% endblock %} 

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<!DOCTYPE html>
+<html>
+<head>
+<title>Execute Datapoints</title>
+</head>
+<body>
+<h1>F_20_05_b_REF_FINREP_3_0</h1>
+<table border="1">
+<a href="{% url 'pybirdai:report_templates'%}">Back to the PyBIRD Reports Templates Page</a>
+<tr><td><a href="{% url 'pybirdai:execute_data_point' 'F_20_05_b_REF_FINREP_3_0_155631_REF'%}">F_20_05_b_REF_FINREP_3_0_155631_REF</a></td></tr>
+<tr><td><a href="{% url 'pybirdai:execute_data_point' 'F_20_05_b_REF_FINREP_3_0_155627_REF'%}">F_20_05_b_REF_FINREP_3_0_155627_REF</a></td></tr>
+<tr><td><a href="{% url 'pybirdai:execute_data_point' 'F_20_05_b_REF_FINREP_3_0_155638_REF'%}">F_20_05_b_REF_FINREP_3_0_155638_REF</a></td></tr>
+</table>
+</body>
+</html>
+</table>
+</body>
+</html>
+{% endblock %}
