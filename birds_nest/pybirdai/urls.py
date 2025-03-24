@@ -114,4 +114,5 @@ urlpatterns = [
     path('import_members_from_csv/', views.import_members_from_csv, name='import_members_from_csv'),
     path('import_variables_from_csv/', views.import_variables_from_csv, name='import_variables_from_csv'),
     path('return_semantic_integration_menu/', views.return_semantic_integration_menu, name='return_semantic_integration_menu'),
+    path('edit_mapping_endpoint/', views.edit_mapping_endpoint, name='edit_mapping_endpoint'),
 ]

@@ -1978,6 +1978,15 @@ def run_create_python_joins_from_db(request):
     )
 
 def return_semantic_integration_menu(request, mapping_id=""):
+
+    # Here I would like to fetch the subdomains from the cube structure items, so that I could
+    # 1. Display it in the interface when choosing the new row
+    # 2. Create the necessary member in the intersection cube / domain (which is subdomain) and cube structure item in case it is only one member
+    # 3. Cascade the changes through the whole model.
+    # Todo()! : Do we want to rerun the mappings on the combination items / template cells?
+    # Todo()! : Do we want to integrate the CubeMapping Table, in order to then full use the CubeToCombintation and CSI
+    domains = None
+
     print("Received request for semantic integration menu with method: %s", request.method)
     results = dict()
 
@@ -2025,15 +2034,24 @@ def return_semantic_integration_menu(request, mapping_id=""):
         member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=map_def.member_mapping_id.code)
         serialized_items_2 = {}
         unique_set = {}
+        var_items = VARIABLE_MAPPING_ITEM.objects.filter(
+            variable_mapping_id=map_def.variable_mapping_id
+        )
+        source_vars = [f"{item.variable_id.name} ({item.variable_id.code})" for item in var_items if item.is_source.lower() == 'true']
+        target_vars = [f"{item.variable_id.name} ({item.variable_id.code})" for item in var_items if item.is_source.lower() != 'true']
+        source_target = {"source":source_vars,"target":target_vars}
         # Pre-compute all columns by finding all variables across all mapping items
         for item in member_mapping_items:
             vars_ = f"{item.variable_id.name} ({item.variable_id.code})"
             if vars_ not in unique_set:
                 unique_set[vars_] = set()
+
+        print(source_target)
         # First pass to collect all rows
         temp_items = {}
         for _ in member_mapping_items:
             if _.member_mapping_row not in temp_items:
+
                 temp_items[_.member_mapping_row] = {'has_source': False, 'has_target': False, 'items': {k:"None (None)" for k in unique_set}}
             vars_ = f"{_.variable_id.name} ({_.variable_id.code})"
             member_ = f"{_.member_id.name} ({_.member_id.code})"
@@ -2054,27 +2072,106 @@ def return_semantic_integration_menu(request, mapping_id=""):
 
         # Transform serialized_items_2 into a table format
         table_data = {
-            'headers': list(unique_set.keys()) if serialized_items_2 else [],
+            'headers': ["row_id"]+list(unique_set.keys()) if serialized_items_2 else [],
             'rows': []
         }
 
         for row_id, row_data in serialized_items_2.items():
-            table_row = {}
+            table_row = {"row_id":row_id}
             table_row.update(row_data)
             table_data['rows'].append(table_row)
 
-        print(table_data)
-
         context.update({
-            'table_data': table_data
-        })
-        context.update({
+            'table_data': table_data,
             "selected_mapping": selected_mapping,
-            "uniques":unique_set
+            "uniques":unique_set,
+            "domains":domains,
+            "uniques_sources":{k:v for k,v in unique_set.items() if k in source_target["source"]},
+            "uniques_targets":{k:v for k,v in unique_set.items() if k in source_target["target"]},
         })
 
     return render(request, 'pybirdai/return_semantic_integrations.html', context)
 
 def edit_mapping_endpoint(request, data=""):
     if request.method == "POST":
-        pass
+        try:
+            data = json.loads(request.body)
+            mapping_id = data.get('mapping_id')
+            member_mapping_row = data.get('member_mapping_row')
+            member_mappings = data.get('member_mappings', [])
+
+            # Get the mapping definition
+            mapping_def = MAPPING_DEFINITION.objects.get(code=mapping_id)
+            member_mapping = mapping_def.member_mapping_id
+
+            # Process each member mapping
+            for mapping in member_mappings:
+                var_id = mapping['variable_id']
+                member_id = mapping['member_id']
+                is_source = mapping['is_source']
+
+                # Get or create member in domain/subdomain
+                variable = VARIABLE.objects.get(code=var_id)
+                domain = variable.domain_id
+
+                try:
+                    member = MEMBER.objects.get(code=member_id, domain_id=domain)
+                except MEMBER.DoesNotExist:
+                    # Create member in domain
+                    member = MEMBER.objects.create(
+                        code=member_id,
+                        name=member_id,  # Use code as name initially
+                        domain_id=domain
+                    )
+
+                    # Create member in subdomain if exists
+                    cube_structure_items = CUBE_STRUCTURE_ITEM.objects.filter(variable_id__code=var_id)
+                    for csi in cube_structure_items:
+                        if csi.subdomain_id:
+                            MEMBER.objects.create(
+                                code=member_id,
+                                name=member_id,
+                                domain_id=csi.subdomain_id
+                            )
+
+                            # Update cube structure item mapping
+                            csi.subdomain_mapped_subdomain = csi.subdomain_id
+                            csi.save()
+
+                # Create or update member mapping item
+                MEMBER_MAPPING_ITEM.objects.update_or_create(
+                    member_mapping_id=member_mapping,
+                    member_mapping_row=member_mapping_row,
+                    variable_id=variable,
+                    defaults={
+                        'member_id': member,
+                        'is_source': 'TRUE' if is_source else 'FALSE'
+                    }
+                )
+
+            # Cascade changes through related mappings
+            related_mappings = MAPPING_DEFINITION.objects.filter(member_mapping_id=member_mapping)
+            for rel_mapping in related_mappings:
+                if rel_mapping != mapping_def:
+                    # Copy member mapping items to related mapping
+                    existing_items = MEMBER_MAPPING_ITEM.objects.filter(
+                        member_mapping_id=member_mapping,
+                        member_mapping_row=member_mapping_row
+                    )
+                    for item in existing_items:
+                        MEMBER_MAPPING_ITEM.objects.update_or_create(
+                            member_mapping_id=rel_mapping.member_mapping_id,
+                            member_mapping_row=member_mapping_row,
+                            variable_id=item.variable_id,
+                            defaults={
+                                'member_id': item.member_id,
+                                'is_source': item.is_source
+                            }
+                        )
+
+            return JsonResponse({'status': 'success'})
+
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+
+    return HttpResponseBadRequest('Invalid request method')
