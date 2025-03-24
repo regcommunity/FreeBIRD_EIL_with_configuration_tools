@@ -1,0 +1,266 @@
+<!--
+# Copyright (c) 2024 Bird Software Solutions Ltd
+# This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License 2.0
+# which accompanies this distribution, and is available at
+# https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+# Contributors:
+#    Neil Mackenzie - initial API and implementation
+-->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Review Semantic Integrations</h1>
+
+<p>Select an option to edit:</p>
+
+<!-- Add filter form -->
+<div class="filters">
+    <form method="get" class="filter-form">
+        <div class="filter-group">
+            <label for="mappingSelect">Select Mapping ID:</label>
+            <select name="mapping_id" id="mappingSelect">
+                <option value="">All</option>
+                {% for mapping_data_item in mapping_data %}
+                    <option value="{{ mapping_data_item }}" {% if selected_mapping == mapping_data_item %}selected{% endif %}>{{ mapping_data_item }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="filter-button">Apply Filters</button>
+        <a href="?" class="clear-button">Clear Filters</a>
+    </form>
+</div>
+
+<!-- Display member mapping rows as a table if selected -->
+<div style="overflow-x: auto; height: calc(100vh - 300px);">
+    <div class="table-controls">
+        <button onclick="addRow()" class="table-control-btn">Add Row</button>
+        <button onclick="removeSelectedRow()" class="table-control-btn">Remove Selected Row</button>
+    </div>
+    <table class="member-mapping-table">
+        <thead>
+            <tr>
+                {% for header in table_data.headers %}
+                    <th>
+                        {{ header }}
+                    </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in table_data.rows %}
+            <tr data-row>
+                {% for col_header, value in row.items %}
+                <td style="white-space: pre-wrap; word-wrap: break-word; word-break: break-all;">{{ value }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+function addRow() {
+    const tbody = document.querySelector('.member-mapping-table tbody');
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+        <td><input type="checkbox" class="row-select"></td>
+        {% for header in table_data.headers %}
+        <td style="white-space: pre-wrap; word-wrap: break-word; word-break: break-all;"></td>
+        {% endfor %}
+    `;
+    tbody.appendChild(newRow);
+}
+
+function removeSelectedRow() {
+    const selectedRows = document.querySelectorAll('.row-select:checked');
+    selectedRows.forEach(checkbox => {
+        checkbox.closest('tr').remove();
+    });
+}
+
+function toggleAllRows() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.row-select');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+}
+
+function filterColumn(header, value) {
+    // To handle the onchange event
+}
+
+function applyColumnFilter(header) {
+    const select = document.querySelector(`select[onchange*="filterColumn('${header}']`);
+    const selectedValue = select.value;
+    const rows = document.querySelectorAll('.member-mapping-table tbody tr');
+
+    rows.forEach(row => {
+        const cell = Array.from(row.cells).find((cell, index) =>
+            document.querySelector('.member-mapping-table thead th:nth-child(' + (index + 1) + ')').textContent.trim() === header
+        );
+
+        if (selectedValue === '' || cell.textContent.trim() === selectedValue) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
+<style>
+    .pagination {
+        margin-top: 20px;
+    }
+    table {
+        border-collapse: collapse;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    th {
+        background-color: #f2f2f2;
+    }
+
+    /* Add new filter styles */
+    .filters {
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .filters form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .filters label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .filters select {
+        padding: 6px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        width: 100%;
+    }
+    .filter-button, .clear-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .filter-button {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .clear-button {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .filter-button:hover {
+        background-color: #0056b3;
+    }
+
+    .clear-button:hover {
+        background-color: #5a6268;
+    }
+
+    .create-button {
+        margin-bottom: 20px;
+        padding: 8px 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .create-button:hover {
+        background-color: #45a049;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.4);
+    }
+
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        max-width: 500px;
+        border-radius: 4px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    .form-buttons {
+        margin-top: 20px;
+        text-align: right;
+    }
+
+    .form-buttons button {
+        margin-left: 10px;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .submit-button {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    .cancel-button {
+        background-color: #f44336;
+        color: white;
+    }
+</style>
+{% endblock %}

@@ -17,12 +17,14 @@ from django.core.paginator import Paginator
 from django.db import transaction, connection
 from django.conf import settings
 from django.views.decorators.http import require_http_methods
+from django.core import serializers
 from .bird_meta_data_model import (
     VARIABLE_MAPPING, VARIABLE_MAPPING_ITEM, MEMBER_MAPPING, MEMBER_MAPPING_ITEM,
     CUBE_LINK, CUBE_STRUCTURE_ITEM_LINK, MAPPING_TO_CUBE, MAPPING_DEFINITION,
     COMBINATION, COMBINATION_ITEM, CUBE, CUBE_STRUCTURE_ITEM, VARIABLE, MEMBER,
     MAINTENANCE_AGENCY,  MEMBER_HIERARCHY, DOMAIN
 )
+import json
 from . import bird_meta_data_model
 from .entry_points.import_input_model import RunImportInputModelFromSQLDev
 
@@ -58,6 +60,9 @@ from .context.csv_column_index_context import ColumnIndexes
 from django.apps import apps
 from django.db import models
 import inspect
+
+JSONSerializer = serializers.get_serializer("json")
+json_serializer = JSONSerializer()
 
 
 
@@ -1972,9 +1977,104 @@ def run_create_python_joins_from_db(request):
         "Create Transformations Rules in Python"
     )
 
-def return_semantic_integration_menu(request):
-    match request.method:
-        case "GET":
-            return JsonResponse({'status': 'success'})
-        case _:
-            pass
+def return_semantic_integration_menu(request, mapping_id=""):
+    print("Received request for semantic integration menu with method: %s", request.method)
+    results = dict()
+
+    selected_mapping = request.GET.get('mapping_id', mapping_id)
+
+    mtcs = MAPPING_TO_CUBE.objects.all()
+    print("Fetched %d MAPPING_TO_CUBE records", len(mtcs))
+    maps = [mtc.cube_mapping_id for mtc in mtcs if 'M_F_01_01_REF_FINREP 3_0' == mtc.cube_mapping_id]
+
+    mapping_definitions = MAPPING_DEFINITION.objects.all()
+
+    for map_def in mapping_definitions:
+        # Skip if no member mapping
+        if not map_def.member_mapping_id:
+            continue
+
+        # Check if it's a deletion mapping by looking at variable mapping
+        if map_def.variable_mapping_id:
+            # Get all variable mapping items for this mapping
+            var_items = VARIABLE_MAPPING_ITEM.objects.filter(
+                variable_mapping_id=map_def.variable_mapping_id
+            )
+            source_vars = [item for item in var_items if item.is_source.lower() == 'true']
+            target_vars = [item for item in var_items if item.is_source.lower() != 'true']
+
+            # Skip if it's a deletion mapping (only one source var and no target vars)
+            if len(target_vars) == 0 or len(var_items) == 1:
+                continue
+
+        if map_def.mapping_id not in results:
+            results[map_def.mapping_id] = {
+                "variable_mapping_id": map_def.variable_mapping_id.code if map_def.variable_mapping_id else None,
+                "has_member_mapping": True,
+                "member_mapping_id": {
+                    "code": map_def.member_mapping_id.code,
+                    "items": []
+                }
+            }
+
+    context = {"mapping_data": {k: v for k, v in results.items() if v["has_member_mapping"]}}
+
+    if selected_mapping:
+        print("Getting selected mapping details!")
+        map_def = MAPPING_DEFINITION.objects.get(code=selected_mapping)
+        member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=map_def.member_mapping_id.code)
+        serialized_items_2 = {}
+        unique_set = {}
+        # Pre-compute all columns by finding all variables across all mapping items
+        for item in member_mapping_items:
+            vars_ = f"{item.variable_id.name} ({item.variable_id.code})"
+            if vars_ not in unique_set:
+                unique_set[vars_] = set()
+        # First pass to collect all rows
+        temp_items = {}
+        for _ in member_mapping_items:
+            if _.member_mapping_row not in temp_items:
+                temp_items[_.member_mapping_row] = {'has_source': False, 'has_target': False, 'items': {k:"None (None)" for k in unique_set}}
+            vars_ = f"{_.variable_id.name} ({_.variable_id.code})"
+            member_ = f"{_.member_id.name} ({_.member_id.code})"
+            if _.is_source.lower() == 'true':
+                temp_items[_.member_mapping_row]['has_source'] = True
+            else:
+                temp_items[_.member_mapping_row]['has_target'] = True
+
+            if vars_ not in temp_items[_.member_mapping_row]['items']:
+                temp_items[_.member_mapping_row]['items'][vars_] = {}
+            temp_items[_.member_mapping_row]['items'][vars_] = member_
+
+            unique_set[vars_].add(member_)
+
+        # Filter and build final serialized_items_2
+        for row_id, row_data in temp_items.items():
+            serialized_items_2[row_id] = row_data['items']
+
+        # Transform serialized_items_2 into a table format
+        table_data = {
+            'headers': list(unique_set.keys()) if serialized_items_2 else [],
+            'rows': []
+        }
+
+        for row_id, row_data in serialized_items_2.items():
+            table_row = {}
+            table_row.update(row_data)
+            table_data['rows'].append(table_row)
+
+        print(table_data)
+
+        context.update({
+            'table_data': table_data
+        })
+        context.update({
+            "selected_mapping": selected_mapping,
+            "uniques":unique_set
+        })
+
+    return render(request, 'pybirdai/return_semantic_integrations.html', context)
+
+def edit_mapping_endpoint(request, data=""):
+    if request.method == "POST":
+        pass
