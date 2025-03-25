@@ -115,4 +115,9 @@ urlpatterns = [
     path('import_variables_from_csv/', views.import_variables_from_csv, name='import_variables_from_csv'),
     path('return_semantic_integration_menu/', views.return_semantic_integration_menu, name='return_semantic_integration_menu'),
     path('edit_mapping_endpoint/', views.edit_mapping_endpoint, name='edit_mapping_endpoint'),
+    path('add_variable_endpoint/', views.add_variable_endpoint, name='add_variable_endpoint'),
+    path('get_domain_members/<str:variable_id>/', views.get_domain_members, name='get_domain_members'),
+    path('get_mapping_details/<str:mapping_id>/', views.get_mapping_details, name='get_mapping_details'),
+
+
 ]

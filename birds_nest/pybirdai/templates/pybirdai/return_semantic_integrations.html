@@ -22,7 +22,6 @@
             <div class="filter-group">
                 <label for="mappingSelect">Select Mapping ID:</label>
                 <select name="mapping_id" id="mappingSelect">
-                    <option value="">All</option>
                     {% for mapping_data_item in mapping_data %}
                         <option value="{{ mapping_data_item }}" {% if selected_mapping == mapping_data_item %}selected{% endif %}>{{ mapping_data_item }}</option>
                     {% endfor %}
@@ -31,6 +30,10 @@
 
             <button type="submit" class="filter-button">Apply Filters</button>
         </form>
+        <div class="table-controls" style="flex-shrink: 0; margin-top: 20px;">
+            <button onclick="addRow()" class="table-control-btn" style="padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px;">Add Row</button>
+            <button onclick="addVariable()" class="table-control-btn" style="padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Add Variable</button>
+        </div>
     </div>
 
     <div id="addRowModal" class="modal">
@@ -44,8 +47,8 @@
                         <div class="form-group" style="margin-bottom: 25px;">
                             <label for="{{ header }}Select" style="margin-bottom: 10px;">Select {{ header }}:</label>
                             <select name="{{ header }}" id="{{ header }}Select" style="padding: 12px;">
-                                {% for row in values %}
-                                    <option value="{{ row }}">{{ row }}</option>
+                                {% for idx, row in values.items %}
+                                    <option value="{{ idx }}">{{ row }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -57,8 +60,8 @@
                         <div class="form-group" style="margin-bottom: 25px;">
                             <label for="{{ header }}Select" style="margin-bottom: 10px;">Select {{ header }}:</label>
                             <select name="{{ header }}" id="{{ header }}Select" style="padding: 12px;">
-                                {% for row in values %}
-                                    <option value="{{ row }}">{{ row }}</option>
+                                {% for idx, row in values.items %}
+                                    <option value="{{ idx }}">{{ row }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -73,16 +76,40 @@
         </div>
     </div>
 
+    <div id="addVariableModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 30px; font-size: 28px;">Add Variable and Members</h2>
+            <form id="addVariableForm" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column;" onsubmit="submitVariableForm(event)">
+                <div class="form-group" id="form-variableSelect">
+                    <label for="variableSelect">Select Variable:</label>
+                    <select name="variable" id="variableSelect" class="variable-dropdown-menu" style="width: 100%;" onchange="variableSelected(this.value)">
+                        {% for variable in available_variables %}
+                            <option value="{{ variable }}">{{ variable }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" id="form-memberSelect">
+                </div>
+                <div class="form-group">
+                    <label for="rowSelect">Select Row to Update:</label>
+                    <select name="selectedRow" id="rowSelect" style="padding: 12px;">
+                    </select>
+                </div>
+                <div class="form-buttons" style="width: 100%; padding: 20px; border-top: 1px solid #ddd; margin-top: auto;">
+                    <button type="button" onclick="closeVariableModal()" class="cancel-button" style="padding: 12px 24px; margin-right: 15px;">Cancel</button>
+                    <button type="submit" class="submit-button" style="padding: 12px 24px;">Add Variable</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- Display member mapping rows as a table if selected -->
     <div style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
-        <div class="table-controls" style="flex-shrink: 0;">
-            <button onclick="addRow()" class="table-control-btn" style="padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Add Row</button>
-        </div>
         <div style="flex: 1; overflow: auto;">
             <table class="member-mapping-table">
                 <thead>
-                    <tr>
+                    <tr></tr>
                         {% for header in table_data.headers %}
                             <th style="{% if header in uniques_sources.keys %}background-color: #e6f3ff{% elif header in uniques_targets.keys %}background-color: #fff0e6{% endif %}">
                                 {{ header }}
@@ -104,9 +131,128 @@
     </div>
 </div>
 <script>
+
+window.addEventListener('load', function() {
+    var select = document.getElementById('variableSelect');
+    if(select.value) {
+        variableSelected(select.value);
+    }
+    populateRowSelect();
+    setupVariableDropdown();
+});
+
+function populateRowSelect() {
+    const rowSelect = document.getElementById('rowSelect');
+    const rows = document.querySelectorAll('[data-row]');
+    rowSelect.innerHTML = '';
+
+    rows.forEach((row, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `Row ${index}`;
+        rowSelect.appendChild(option);
+    });
+}
+
+function filterMembers() {
+    var input = document.getElementById("memberSearch");
+    var filter = input.value.toUpperCase();
+    var select = document.getElementById("memberSelect");
+    var options = select.getElementsByTagName("option");
+
+    for (var i = 0; i < options.length; i++) {
+        var txtValue = options[i].text;
+        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+            options[i].style.display = "";
+        } else {
+            options[i].style.display = "none";
+        }
+    }
+}
+
+function setupVariableDropdown() {
+    const select = document.getElementById('variableSelect');
+    const dropdown = document.getElementById('variableDropdownMenu');
+    const options = document.getElementById('variableOptions');
+
+    select.addEventListener('click', function(e) {
+        e.preventDefault();
+        const rect = select.getBoundingClientRect();
+        dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
+        dropdown.style.left = rect.left + 'px';
+        dropdown.style.width = rect.width + 'px';
+        dropdown.style.display = 'block';
+
+        // Populate options
+        options.innerHTML = '';
+        Array.from(select.options).forEach(opt => {
+            const div = document.createElement('div');
+            div.className = 'variable-option';
+            div.textContent = opt.text;
+            div.onclick = function() {
+                select.value = opt.value;
+                dropdown.style.display = 'none';
+                variableSelected(opt.value);
+            };
+            options.appendChild(div);
+        });
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!dropdown.contains(e.target) && e.target !== select) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function filterVariables() {
+    const input = document.getElementById('variableSearchInput');
+    const filter = input.value.toUpperCase();
+    const options = document.getElementById('variableOptions').getElementsByClassName('variable-option');
+
+    for (let option of options) {
+        const txtValue = option.textContent || option.innerText;
+        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    }
+}
+
+function variableSelected(selectedVariable) {
+    const memberGroup = document.getElementById('form-memberSelect');
+    memberGroup.innerHTML = `<label for="memberSelect">Select Members:</label>
+         <div class="search-container" style="margin-bottom: 10px;">
+             <input type="text" id="memberSearch" onkeyup="filterMembers()" placeholder="Search members..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+         </div>
+         <select name="members" id="memberSelect" multiple style="padding: 12px; height: 200px;">
+         </select>`;
+
+    fetch(`/pybirdai/get_domain_members/${selectedVariable}`)
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('memberSelect');
+            data.members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.member_id;
+                console.log(member)
+                option.textContent = `${member.name} (${member.code})`;
+                select.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error:', error));
+}
+
 function addRow() {
     const modal = document.getElementById('addRowModal');
     modal.style.display = 'block';
+}
+
+function addVariable() {
+    const modal = document.getElementById('addVariableModal');
+    modal.style.display = 'block';
+    populateRowSelect();
 }
 
 function closeModal() {
@@ -114,6 +260,56 @@ function closeModal() {
     modal.style.display = 'none';
 }
 
+function closeVariableModal() {
+    const modal = document.getElementById('addVariableModal');
+    modal.style.display = 'none';
+}
+
+function submitVariableForm(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('addVariableForm');
+    const formData = new FormData(form);
+
+    const data = {
+        mapping_id: document.getElementById('mappingSelect').value,
+        member_mapping_row: formData.get('selectedRow'),
+        variable: formData.get('variable'),
+        members: Array.from(form.querySelector('#memberSelect').selectedOptions).map(option => option.value),
+        is_source: 'false'
+    };
+
+    // Get the CSRF token from the cookie
+    const csrftoken = getCookie('csrftoken');
+
+    // Add CSRF token to the request headers
+    const headers = new Headers({
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken
+    });
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    const request = new Request("/pybirdai/add_variable_endpoint/", { headers: { 'X-CSRFToken': getCookie("csrftoken") } })
+    fetch(request, {
+        method: 'POST',
+        mode: "same-origin",
+        headers: headers,
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        closeVariableModal();
+        location.reload();
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+    });
+}
 function submitForm(event) {
     event.preventDefault();
 
@@ -121,6 +317,21 @@ function submitForm(event) {
     const formData = new FormData(form);
     const sourceData = {};
     const targetData = {};
+
+    // Get the CSRF token from the cookie
+    const csrftoken = getCookie('csrftoken');
+
+    // Add CSRF token to the request headers
+    const headers = new Headers({
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken
+    });
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
 
     // Separate source and target values
     for(let [key, value] of formData.entries()) {
@@ -132,16 +343,28 @@ function submitForm(event) {
     }
 
     const data = {
-        mapping_id: document.getElementById('mappingSelect').value,
+      mapping_id: document.getElementById('mappingSelect').value,
+      source_data: {
         member_mapping_row: sourceData,
-        member_mappings: [targetData]
+        variabless: Object.keys(sourceData),
+        members: Object.values(sourceData),
+        is_source: true
+      },
+      target_data: {
+        member_mapping_row: targetData,
+        variablses: Object.keys(targetData),
+        members: Object.values(targetData).map(v => v || null),
+        is_source: false
+      }
     };
 
-    fetch('/pybirdai/edit_mapping_endpoint', {
+    fetch('/pybirdai/edit_mapping_endpoint/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
+        mode: "same-origin",
+        headers: headers,
         body: JSON.stringify(data)
     })
     .then(response => response.json())
@@ -304,6 +527,17 @@ function submitForm(event) {
     .cancel-button {
         background-color: #f44336;
         color: white;
+    }
+
+    .variable-dropdown-menu {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .variable-option {
+        padding: 8px;
+        cursor: pointer;
+    }
+    .variable-option:hover {
+        background-color: #f5f5f5;
     }
 </style>
 {% endblock %}

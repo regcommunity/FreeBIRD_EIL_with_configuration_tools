@@ -447,7 +447,7 @@ class MEMBER_MAPPING_ITEM(models.Model):
         blank=True,
         null=True,
     )
-    
+
 
     valid_from = models.DateTimeField("valid_from", default=None, blank=True, null=True)
     valid_to = models.DateTimeField("valid_to", default=None, blank=True, null=True)
@@ -521,7 +521,7 @@ class MAPPING_TO_CUBE(models.Model):
         blank=True,
         null=True,
     )
-    
+
     valid_from = models.DateTimeField("valid_from", default=None, blank=True, null=True)
 
     valid_to = models.DateTimeField("valid_to", default=None, blank=True, null=True)
@@ -740,7 +740,7 @@ class TABLE_CELL(models.Model):
         "system_data_code", max_length=255, default=None, blank=True, null=True
     )
 
-    
+
     name = models.CharField("name", max_length=255, default=None, blank=True, null=True)
 
     class Meta:

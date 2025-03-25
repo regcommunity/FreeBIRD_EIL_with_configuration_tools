@@ -60,12 +60,23 @@ from .context.csv_column_index_context import ColumnIndexes
 from django.apps import apps
 from django.db import models
 import inspect
-
-JSONSerializer = serializers.get_serializer("json")
-json_serializer = JSONSerializer()
-
-
-
+from .utils.mapping_library import (
+    build_mapping_results,
+    add_variable_to_mapping,
+    create_or_update_member,
+    update_member_mapping_item,
+    process_related_mappings,
+    process_member_mappings,
+    create_table_data,
+    get_reference_variables,
+    cascade_member_mapping_changes,
+    process_mapping_chain
+)
+import time
+from datetime import datetime
+from typing import Dict, List, Set, Tuple, Any, Optional
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Helper function for paginated modelformset views
 def paginated_modelformset_view(request, model, template_name, order_by=None):
@@ -1977,109 +1988,44 @@ def run_create_python_joins_from_db(request):
         "Create Transformations Rules in Python"
     )
 
-def return_semantic_integration_menu(request, mapping_id=""):
 
-    # Here I would like to fetch the subdomains from the cube structure items, so that I could
-    # 1. Display it in the interface when choosing the new row
-    # 2. Create the necessary member in the intersection cube / domain (which is subdomain) and cube structure item in case it is only one member
-    # 3. Cascade the changes through the whole model.
-    # Todo()! : Do we want to rerun the mappings on the combination items / template cells?
-    # Todo()! : Do we want to integrate the CubeMapping Table, in order to then full use the CubeToCombintation and CSI
+def return_semantic_integration_menu(request: Any, mapping_id: str = "") -> Any:
+    """Returns semantic integration menu view.
+
+    Args:
+        request: HTTP request object
+        mapping_id: Optional mapping identifier
+
+    Returns:
+        Rendered template response
+    """
+    logger.info(f"Handling semantic integration menu request for mapping ID: {mapping_id}")
     domains = None
-
-    print("Received request for semantic integration menu with method: %s", request.method)
-    results = dict()
-
     selected_mapping = request.GET.get('mapping_id', mapping_id)
 
     mtcs = MAPPING_TO_CUBE.objects.all()
-    print("Fetched %d MAPPING_TO_CUBE records", len(mtcs))
+    logger.debug(f"Found {len(mtcs)} MAPPING_TO_CUBE records")
     maps = [mtc.cube_mapping_id for mtc in mtcs if 'M_F_01_01_REF_FINREP 3_0' == mtc.cube_mapping_id]
 
     mapping_definitions = MAPPING_DEFINITION.objects.all()
-
-    for map_def in mapping_definitions:
-        # Skip if no member mapping
-        if not map_def.member_mapping_id:
-            continue
-
-        # Check if it's a deletion mapping by looking at variable mapping
-        if map_def.variable_mapping_id:
-            # Get all variable mapping items for this mapping
-            var_items = VARIABLE_MAPPING_ITEM.objects.filter(
-                variable_mapping_id=map_def.variable_mapping_id
-            )
-            source_vars = [item for item in var_items if item.is_source.lower() == 'true']
-            target_vars = [item for item in var_items if item.is_source.lower() != 'true']
-
-            # Skip if it's a deletion mapping (only one source var and no target vars)
-            if len(target_vars) == 0 or len(var_items) == 1:
-                continue
-
-        if map_def.mapping_id not in results:
-            results[map_def.mapping_id] = {
-                "variable_mapping_id": map_def.variable_mapping_id.code if map_def.variable_mapping_id else None,
-                "has_member_mapping": True,
-                "member_mapping_id": {
-                    "code": map_def.member_mapping_id.code,
-                    "items": []
-                }
-            }
-
+    results = build_mapping_results(mapping_definitions)
     context = {"mapping_data": {k: v for k, v in results.items() if v["has_member_mapping"]}}
 
+    reference_variables = get_reference_variables()
+    keys = sorted(reference_variables.keys())
+    reference_variables = {k:reference_variables[k] for k in keys}
+    context["available_variables"] = reference_variables
+
     if selected_mapping:
-        print("Getting selected mapping details!")
+        logger.info(f"Processing selected mapping: {selected_mapping}")
         map_def = MAPPING_DEFINITION.objects.get(code=selected_mapping)
         member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=map_def.member_mapping_id.code)
-        serialized_items_2 = {}
-        unique_set = {}
-        var_items = VARIABLE_MAPPING_ITEM.objects.filter(
-            variable_mapping_id=map_def.variable_mapping_id
-        )
-        source_vars = [f"{item.variable_id.name} ({item.variable_id.code})" for item in var_items if item.is_source.lower() == 'true']
-        target_vars = [f"{item.variable_id.name} ({item.variable_id.code})" for item in var_items if item.is_source.lower() != 'true']
-        source_target = {"source":source_vars,"target":target_vars}
-        # Pre-compute all columns by finding all variables across all mapping items
-        for item in member_mapping_items:
-            vars_ = f"{item.variable_id.name} ({item.variable_id.code})"
-            if vars_ not in unique_set:
-                unique_set[vars_] = set()
+        var_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=map_def.variable_mapping_id)
 
-        print(source_target)
-        # First pass to collect all rows
-        temp_items = {}
-        for _ in member_mapping_items:
-            if _.member_mapping_row not in temp_items:
+        temp_items, unique_set, source_target = process_member_mappings(member_mapping_items, var_items)
+        serialized_items_2 = {row_id: row_data['items'] for row_id, row_data in temp_items.items()}
+        table_data = create_table_data(serialized_items_2, unique_set)
 
-                temp_items[_.member_mapping_row] = {'has_source': False, 'has_target': False, 'items': {k:"None (None)" for k in unique_set}}
-            vars_ = f"{_.variable_id.name} ({_.variable_id.code})"
-            member_ = f"{_.member_id.name} ({_.member_id.code})"
-            if _.is_source.lower() == 'true':
-                temp_items[_.member_mapping_row]['has_source'] = True
-            else:
-                temp_items[_.member_mapping_row]['has_target'] = True
-
-            if vars_ not in temp_items[_.member_mapping_row]['items']:
-                temp_items[_.member_mapping_row]['items'][vars_] = {}
-            temp_items[_.member_mapping_row]['items'][vars_] = member_
-
-            unique_set[vars_].add(member_)
-
-        # Filter and build final serialized_items_2
-        for row_id, row_data in temp_items.items():
-            serialized_items_2[row_id] = row_data['items']
-
-        # Transform serialized_items_2 into a table format
-        table_data = {
-            'headers': ["row_id"]+list(unique_set.keys()) if serialized_items_2 else [],
-            'rows': []
-        }
-
-        for row_id, row_data in serialized_items_2.items():
-            table_row = {"row_id":row_id}
-            table_row.update(row_data)
-            table_data['rows'].append(table_row)
 
         context.update({
             'table_data': table_data,
@@ -2092,86 +2038,434 @@ def return_semantic_integration_menu(request, mapping_id=""):
 
     return render(request, 'pybirdai/return_semantic_integrations.html', context)
 
-def edit_mapping_endpoint(request, data=""):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            mapping_id = data.get('mapping_id')
-            member_mapping_row = data.get('member_mapping_row')
-            member_mappings = data.get('member_mappings', [])
 
-            # Get the mapping definition
-            mapping_def = MAPPING_DEFINITION.objects.get(code=mapping_id)
-            member_mapping = mapping_def.member_mapping_id
+def add_variable_endpoint(request: Any) -> JsonResponse:
+    """Endpoint for adding variables.
 
-            # Process each member mapping
-            for mapping in member_mappings:
-                var_id = mapping['variable_id']
-                member_id = mapping['member_id']
-                is_source = mapping['is_source']
+    Args:
+        request: HTTP request object
 
-                # Get or create member in domain/subdomain
-                variable = VARIABLE.objects.get(code=var_id)
-                domain = variable.domain_id
+    Returns:
+        JSON response with status
+    """
+    logger.info("Handling add variable endpoint request")
+    if request.method != "POST":
+        logger.warning("Invalid request method")
+        return HttpResponseBadRequest('Invalid request method')
 
-                try:
-                    member = MEMBER.objects.get(code=member_id, domain_id=domain)
-                except MEMBER.DoesNotExist:
-                    # Create member in domain
-                    member = MEMBER.objects.create(
-                        code=member_id,
-                        name=member_id,  # Use code as name initially
-                        domain_id=domain
-                    )
+    try:
+        data = json.loads(request.body)
+        orig_mapping_id = data.get('mapping_id')
+        member_mapping_row = data.get('member_mapping_row')
+        variable = data.get('variable')
+        members = data.get('members', [])
+        is_source = data.get('is_source', 'true')
 
-                    # Create member in subdomain if exists
-                    cube_structure_items = CUBE_STRUCTURE_ITEM.objects.filter(variable_id__code=var_id)
-                    for csi in cube_structure_items:
-                        if csi.subdomain_id:
-                            MEMBER.objects.create(
-                                code=member_id,
-                                name=member_id,
-                                domain_id=csi.subdomain_id
-                            )
+        # Get the variable object
+        variable_obj = VARIABLE.objects.get(variable_id=variable)
 
-                            # Update cube structure item mapping
-                            csi.subdomain_mapped_subdomain = csi.subdomain_id
-                            csi.save()
+        # Get timestamp suffix
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-                # Create or update member mapping item
-                MEMBER_MAPPING_ITEM.objects.update_or_create(
-                    member_mapping_id=member_mapping,
-                    member_mapping_row=member_mapping_row,
-                    variable_id=variable,
-                    defaults={
-                        'member_id': member,
-                        'is_source': 'TRUE' if is_source else 'FALSE'
-                    }
+        # Copy existing mapping if it exists
+        if orig_mapping_id:
+            orig_mapping = MAPPING_DEFINITION.objects.get(mapping_id=orig_mapping_id)
+
+            # Extract base IDs without timestamp if they exist
+            member_mapping_base_id = orig_mapping.member_mapping_id.member_mapping_id.split('__')[0] if '__' in orig_mapping.member_mapping_id.member_mapping_id else orig_mapping.member_mapping_id.member_mapping_id
+            variable_mapping_base_id = orig_mapping.variable_mapping_id.variable_mapping_id.split('__')[0] if '__' in orig_mapping.variable_mapping_id.variable_mapping_id else orig_mapping.variable_mapping_id.variable_mapping_id
+            mapping_base_id = orig_mapping.mapping_id.split('__')[0] if '__' in orig_mapping.mapping_id else orig_mapping.mapping_id
+
+            # Copy member mapping
+            new_member_mapping = MEMBER_MAPPING.objects.create(
+                member_mapping_id=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                code=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                name=f"{orig_mapping.member_mapping_id.name} ({timestamp})"
+            )
+
+            # Copy variable mapping
+            new_variable_mapping = VARIABLE_MAPPING.objects.create(
+                variable_mapping_id=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                code=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                name=f"{orig_mapping.variable_mapping_id.name} ({timestamp})"
+            )
+
+            # Copy existing variable mapping items
+            existing_variable_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=orig_mapping.variable_mapping_id)
+            for item in existing_variable_items:
+                new_variable_item = VARIABLE_MAPPING_ITEM.objects.create(
+                    variable_mapping_id=new_variable_mapping,
+                    variable_id=item.variable_id,
+                    is_source=item.is_source
+                )
+                logger.info(f"I created new variable mapping item: {new_variable_item.id}")
+
+            new_variable_item = VARIABLE_MAPPING_ITEM.objects.create(
+                variable_mapping_id=new_variable_mapping,
+                variable_id=variable_obj,
+                is_source=is_source
+            )
+
+            logger.info(f"I created new variable mapping item: {new_variable_item.id}")
+
+            # Copy mapping definition
+            mapping_def = MAPPING_DEFINITION.objects.create(
+                mapping_id=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                code=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                name=f"{orig_mapping.name} ({timestamp})",
+                member_mapping_id=new_member_mapping,
+                variable_mapping_id=new_variable_mapping
+            )
+
+            # Copy existing member mapping items
+            existing_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=orig_mapping.member_mapping_id)
+            for item in existing_items:
+                MEMBER_MAPPING_ITEM.objects.create(
+                    member_mapping_id=new_member_mapping,
+                    member_mapping_row=item.member_mapping_row,
+                    variable_id=item.variable_id,
+                    member_id=item.member_id,
+                    is_source=item.is_source
                 )
 
-            # Cascade changes through related mappings
-            related_mappings = MAPPING_DEFINITION.objects.filter(member_mapping_id=member_mapping)
-            for rel_mapping in related_mappings:
-                if rel_mapping != mapping_def:
-                    # Copy member mapping items to related mapping
-                    existing_items = MEMBER_MAPPING_ITEM.objects.filter(
-                        member_mapping_id=member_mapping,
-                        member_mapping_row=member_mapping_row
+        else:
+            # Create new mappings
+            new_member_mapping = MEMBER_MAPPING.objects.create(
+                member_mapping_id=f"MM_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                code=f"MM_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                name=f"Member mapping for {variable_obj.code}"
+            )
+
+            new_variable_mapping = VARIABLE_MAPPING.objects.create(
+                variable_mapping_id=f"VM_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                code=f"VM_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                name=f"Variable mapping for {variable_obj.code}"
+            )
+
+            mapping_def = MAPPING_DEFINITION.objects.create(
+                mapping_id=f"MAP_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                code=f"MAP_{variable_obj.code}".split("__")[0]+f"__{timestamp}",
+                name=f"Mapping for {variable_obj.code}",
+                member_mapping_id=new_member_mapping,
+                variable_mapping_id=new_variable_mapping
+            )
+
+        # Add new member mapping items
+        member_mapping_items = []
+        for member_id in members:
+            if member_id != "None":
+                member_obj = MEMBER.objects.get(member_id=member_id)
+                mapping_item = MEMBER_MAPPING_ITEM(
+                    member_mapping_id=new_member_mapping,
+                    member_mapping_row=member_mapping_row,
+                    variable_id=variable_obj,
+                    member_id=member_obj,
+                    is_source=is_source
+                )
+                member_mapping_items.append(mapping_item)
+
+        # Bulk create member mapping items
+        MEMBER_MAPPING_ITEM.objects.bulk_create(member_mapping_items)
+
+        # Create mapping to cube with version suffix
+        old_mappings = MAPPING_TO_CUBE.objects.filter(mapping_id=mapping_def)
+        if old_mappings.exists():
+            latest = old_mappings.latest('cube_mapping_id')
+            version = int(latest.cube_mapping_id.split('_v')[-1]) + 1
+            new_mapping_code = f"{latest.cube_mapping_id.split('_v')[0]}_v{version}"
+        else:
+            new_mapping_code = f"{mapping_def.code}_v1"
+
+        MAPPING_TO_CUBE.objects.create(
+            mapping_id=mapping_def,
+            cube_mapping_id=new_mapping_code
+        )
+
+        logger.info("Variable and members added successfully")
+        return JsonResponse({'status': 'success'})
+
+    except Exception as e:
+        logger.error(f"Error adding variable: {str(e)}", exc_info=True)
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+def edit_mapping_endpoint(request: Any) -> JsonResponse:
+    """Endpoint for editing mappings.
+
+    Args:
+        request: HTTP request object
+
+    Returns:
+        JSON response with status
+    """
+    logger.info("Handling edit mapping endpoint request")
+    if request.method != "POST":
+        logger.warning("Invalid request method")
+        return HttpResponseBadRequest('Invalid request method')
+
+    try:
+        data = json.loads(request.body)
+        orig_mapping_id = data.get('mapping_id')
+        source_data = data.get('source_data', {})
+        target_data = data.get('target_data', {})
+
+        print(source_data,target_data)
+
+        # Get timestamp for new instances
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        # Get existing mapping if available
+        if orig_mapping_id:
+            with transaction.atomic():
+                orig_mapping = MAPPING_DEFINITION.objects.get(mapping_id=orig_mapping_id)
+
+                # Extract base IDs without timestamp if they exist
+                member_mapping_base_id = orig_mapping.member_mapping_id.member_mapping_id.split('__')[0] if '__' in orig_mapping.member_mapping_id.member_mapping_id else orig_mapping.member_mapping_id.member_mapping_id
+                variable_mapping_base_id = orig_mapping.variable_mapping_id.variable_mapping_id.split('__')[0] if '__' in orig_mapping.variable_mapping_id.variable_mapping_id else orig_mapping.variable_mapping_id.variable_mapping_id
+                mapping_base_id = orig_mapping.mapping_id.split('__')[0] if '__' in orig_mapping.mapping_id else orig_mapping.mapping_id
+
+                # Copy member mapping
+                new_member_mapping = MEMBER_MAPPING.objects.create(
+                    member_mapping_id=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    code=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    name=f"{orig_mapping.member_mapping_id.name} ({timestamp})"
+                )
+                logger.info(f"I created new member mapping with ID: {new_member_mapping.member_mapping_id}")
+
+                # Copy variable mapping
+                new_variable_mapping = VARIABLE_MAPPING.objects.create(
+                    variable_mapping_id=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    code=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    name=f"{orig_mapping.variable_mapping_id.name} ({timestamp})"
+                )
+                logger.info(f"I created new variable mapping with ID: {new_variable_mapping.variable_mapping_id}")
+
+                # Copy existing variable mapping items
+                existing_variable_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=orig_mapping.variable_mapping_id)
+                for item in existing_variable_items:
+                    new_variable_item = VARIABLE_MAPPING_ITEM.objects.create(
+                        variable_mapping_id=new_variable_mapping,
+                        variable_id=item.variable_id,
+                        is_source=item.is_source
                     )
-                    for item in existing_items:
-                        MEMBER_MAPPING_ITEM.objects.update_or_create(
-                            member_mapping_id=rel_mapping.member_mapping_id,
-                            member_mapping_row=member_mapping_row,
-                            variable_id=item.variable_id,
-                            defaults={
-                                'member_id': item.member_id,
-                                'is_source': item.is_source
-                            }
-                        )
+                    logger.info(f"I created new variable mapping item: {new_variable_item.id}")
 
-            return JsonResponse({'status': 'success'})
+                # Copy mapping definition
+                mapping_def = MAPPING_DEFINITION.objects.create(
+                    mapping_id=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    code=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
+                    name=f"{orig_mapping.name} ({timestamp})",
+                    member_mapping_id=new_member_mapping,
+                    variable_mapping_id=new_variable_mapping
+                )
+                logger.info(f"I created new mapping definition with ID: {mapping_def.mapping_id}")
 
-        except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)})
+                # Copy existing member mapping items
+                existing_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=orig_mapping.member_mapping_id)
+                for item in existing_items:
+                    new_item = MEMBER_MAPPING_ITEM.objects.create(
+                        member_mapping_id=new_member_mapping,
+                        member_mapping_row=item.member_mapping_row,
+                        variable_id=item.variable_id,
+                        member_id=item.member_id,
+                        is_source=item.is_source
+                    )
+                    logger.info(f"I created new member mapping item for row {new_item.member_mapping_row}")
 
-    return HttpResponseBadRequest('Invalid request method')
+                last_member_mapping_row = str(int(item.member_mapping_row)+1)
+
+                for variable_,member_ in zip(source_data["variabless"],source_data["members"]):
+                    variable_id = variable_.split(" ")[-1].strip("(").rstrip(")")
+                    variable_obj = VARIABLE.objects.get(code=variable_id)
+                    member_obj = MEMBER.objects.get(member_id=member_)
+
+                    new_member_item = MEMBER_MAPPING_ITEM.objects.create(
+                        member_mapping_id=new_member_mapping,
+                        member_mapping_row=last_member_mapping_row,
+                        variable_id=variable_obj,
+                        member_id=member_obj,
+                        is_source=True
+                    )
+                    logger.info(f"I created new member mapping item for row {last_member_mapping_row}")
+
+                for variable_,member_ in zip(target_data["variablses"],target_data["members"]):
+                    variable_id = variable_.split(" ")[-1].strip("(").rstrip(")")
+                    variable_obj = VARIABLE.objects.get(variable_id=variable_id)
+                    member_obj = MEMBER.objects.get(member_id=member_)
+
+                    new_member_item = MEMBER_MAPPING_ITEM.objects.create(
+                        member_mapping_id=new_member_mapping,
+                        member_mapping_row=last_member_mapping_row,
+                        variable_id=variable_obj,
+                        member_id=member_obj,
+                        is_source=False
+                    )
+                    logger.info(f"I created new member mapping item for row {last_member_mapping_row}")
+
+
+        with transaction.atomic():
+
+            # Create mapping to cube with version suffix
+            old_mappings = MAPPING_TO_CUBE.objects.filter(mapping_id=mapping_def)
+            if old_mappings.exists():
+                latest = old_mappings.latest('cube_mapping_id')
+                version = int(latest.cube_mapping_id.split('_v')[-1]) + 1
+                new_mapping_code = f"{latest.cube_mapping_id.split('_v')[0]}_v{version}"
+            else:
+                new_mapping_code = f"{mapping_def.code}_v1"
+
+            mapping_to_cube = MAPPING_TO_CUBE.objects.create(
+                mapping_id=mapping_def,
+                cube_mapping_id=new_mapping_code
+            )
+            logger.info(f"I created new mapping to cube with ID: {mapping_to_cube.cube_mapping_id}")
+
+        logger.info("Mapping updated successfully")
+        return JsonResponse({'status': 'success'})
+
+    except Exception as e:
+        logger.error(f"Error updating mapping: {str(e)}", exc_info=True)
+        return JsonResponse({'status': 'error', 'message': str(e)})
+
+def get_domain_members(request, variable_id:str=""):
+    """Get domain members for a variable.
+
+    Args:
+        request: HTTP request object
+        variable_id: ID of variable to get members for
+
+    Returns:
+        JSON response with members data
+    """
+    logger.info("Handling get domain members request")
+    try:
+        if not variable_id:
+            logger.warning("No variable ID provided")
+            return JsonResponse({'status': 'error', 'message': 'Variable ID required'})
+
+        variable = VARIABLE.objects.get(variable_id=variable_id)
+        domain = variable.domain_id
+        members = MEMBER.objects.filter(domain_id=domain)
+
+        member_data = []
+        for member in members:
+            member_data.append({
+                'member_id': member.member_id,
+                'code': member.code,
+                'name': member.name
+            })
+
+        logger.info(f"Found {len(member_data)} members for variable {variable_id}")
+        return JsonResponse({
+            'status': 'success',
+            'members': member_data
+        })
+
+    except VARIABLE.DoesNotExist:
+        logger.error(f"Variable {variable_id} not found")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Variable {variable_id} not found'
+        })
+    except Exception as e:
+        logger.error(f"Error getting domain members: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
+
+def get_mapping_details(request, mapping_id):
+    """Get mapping definition and related details.
+
+    Args:
+        request: HTTP request object
+        mapping_id: ID of mapping to get details for
+
+    Returns:
+        JSON response with mapping data
+    """
+    logger.info(f"Handling get mapping details request for mapping {mapping_id}")
+    try:
+        # Get mapping definition
+        mapping_def = MAPPING_DEFINITION.objects.get(mapping_id=mapping_id)
+
+        # Get variable mapping and items
+        variable_mapping = mapping_def.variable_mapping_id
+        variable_mapping_items = VARIABLE_MAPPING_ITEM.objects.filter(
+            variable_mapping_id=variable_mapping
+        )
+
+        # Get member mapping and items
+        member_mapping = mapping_def.member_mapping_id
+        member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(
+            member_mapping_id=member_mapping
+        )
+
+        # Build response data
+        mapping_data = {
+            'mapping_definition': {
+                'mapping_id': mapping_def.mapping_id,
+                'code': mapping_def.code,
+                'name': mapping_def.name,
+            },
+            'variable_mapping': {
+                'variable_mapping_id': variable_mapping.variable_mapping_id,
+                'code': variable_mapping.code,
+                'name': variable_mapping.name,
+                'items': []
+            },
+            'member_mapping': {
+                'member_mapping_id': member_mapping.member_mapping_id,
+                'code': member_mapping.code,
+                'name': member_mapping.name,
+                'items': []
+            }
+        }
+        # Add variable mapping items
+        for item in variable_mapping_items:
+            mapping_data['variable_mapping']['items'].append({
+                'source_variable': {
+                    'variable_id': item.variable_id.variable_id,
+                    'code': item.variable_id.code,
+                    'name': item.variable_id.name
+                },
+                'target_variable': {
+                    'variable_id': item.variable_id.variable_id,
+                    'code': item.variable_mapping_id.code,
+                    'name': item.variable_mapping_id.name
+                }
+            })
+
+        # Add member mapping items
+        for item in member_mapping_items:
+            mapping_data['member_mapping']['items'].append({
+                'member_mapping_row': item.member_mapping_row,
+                'variable': {
+                    'variable_id': item.variable_id.variable_id,
+                    'code': item.variable_id.code,
+                    'name': item.variable_id.name
+                },
+                'member': {
+                    'member_id': item.member_id.member_id,
+                    'code': item.member_id.code,
+                    'name': item.member_id.name
+                },
+                'is_source': item.is_source
+            })
+        logger.info("Successfully retrieved mapping details")
+        return JsonResponse({
+            'status': 'success',
+            'data': mapping_data
+        })
+
+    except MAPPING_DEFINITION.DoesNotExist:
+        logger.error(f"Mapping {mapping_id} not found")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Mapping {mapping_id} not found'
+        })
+    except Exception as e:
+        logger.error(f"Error getting mapping details: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        })
