@@ -2271,7 +2271,7 @@ def edit_mapping_endpoint(request: Any) -> JsonResponse:
                     )
                     logger.info(f"I created new member mapping item for row {new_item.member_mapping_row}")
 
-                last_member_mapping_row = str(int(item.member_mapping_row)+1)
+                last_member_mapping_row = str(max(int(item.member_mapping_row) for item in existing_items)+1)
 
                 for variable_,member_ in zip(source_data["variabless"],source_data["members"]):
                     variable_id = variable_.split(" ")[-1].strip("(").rstrip(")")
