@@ -64,8 +64,8 @@ urlpatterns = [
     path('run-create-python-transformations/', views.run_create_python_joins, name='run_create_python_joins'),
     path('executable-transformations/', report_views.executable_transformations, name='executable_transformations'),
     path('create-input-structures/', report_views.input_model, name='input_model'),
-    path('create-transformation-rules-in-python/', report_views.create_transformation_rules_in_python, name='create_transformation_rules_in_python'),   
-    path('create-transformation-rules-in-smcubes/', report_views.create_transformation_rules_in_smcubes, name='create_transformation_rules_in_smcubes'),  
+    path('create-transformation-rules-in-python/', report_views.create_transformation_rules_in_python, name='create_transformation_rules_in_python'),
+    path('create-transformation-rules-in-smcubes/', report_views.create_transformation_rules_in_smcubes, name='create_transformation_rules_in_smcubes'),
     path('run-create-executable-filters/', views.run_create_executable_filters, name='run_create_executable_filters'),
     path('run-create-executable-filters-from-db/', views.run_create_executable_filters_from_db, name='run_create_executable_filters_from_db'),
     path('run-create-python-joins-from-db/', views.run_create_python_joins_from_db, name='run_create_python_joins_from_db'),
@@ -113,4 +113,11 @@ urlpatterns = [
     path('view_ldm_to_sdd_results/', views.view_ldm_to_sdd_results, name='view_ldm_to_sdd_results'),
     path('import_members_from_csv/', views.import_members_from_csv, name='import_members_from_csv'),
     path('import_variables_from_csv/', views.import_variables_from_csv, name='import_variables_from_csv'),
+    path('return_semantic_integration_menu/', views.return_semantic_integration_menu, name='return_semantic_integration_menu'),
+    path('edit_mapping_endpoint/', views.edit_mapping_endpoint, name='edit_mapping_endpoint'),
+    path('add_variable_endpoint/', views.add_variable_endpoint, name='add_variable_endpoint'),
+    path('get_domain_members/<str:variable_id>/', views.get_domain_members, name='get_domain_members'),
+    path('get_mapping_details/<str:mapping_id>/', views.get_mapping_details, name='get_mapping_details'),
+
+
 ]
