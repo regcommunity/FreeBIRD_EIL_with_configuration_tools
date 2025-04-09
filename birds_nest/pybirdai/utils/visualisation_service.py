@@ -152,24 +152,37 @@ class NetworkGraphGenerationService:
                     item_id = f"{node_id}_{item['code']}"
                     target_items.append((item_id, item, node_id))
 
-        # Add source cubes
+        # Add source cubes and items in subgraphs
         for node_id, node in source_cubes:
-            mermaid_chart += f"    {node_id}((\"{return_line_break_at_23_char(node['name'])}\"));\n"
+            # Create a subgraph for each source cube with its items
+            mermaid_chart += f"    subgraph {node_id}_group[\"{node['name']}\"]\n"
+            mermaid_chart += f"        {node_id}((\"{return_line_break_at_23_char(node['name'])}\"));\n"
 
-        # Add source items
-        for item_id, item, node_id in source_items:
-            mermaid_chart += f"    {item_id}[{item['code']}];\n"
-            # Connect source cube to source item
-            if f"    {node_id} --> {item_id};\n" not in mermaid_chart:
-                mermaid_chart += f"    {node_id} --> {item_id};\n"
+            # Add items that belong to this cube in the subgraph
+            for item_id, item, parent_node_id in source_items:
+                if parent_node_id == node_id:
+                    mermaid_chart += f"        {item_id}[{item['code']}];\n"
+                    # Connect source cube to source item
+                    if f"        {node_id} --> {item_id};\n" not in mermaid_chart:
+                        mermaid_chart += f"        {node_id} --> {item_id};\n"
 
-        # Add target items
-        for item_id, item, node_id in target_items:
-            mermaid_chart += f"    {item_id}{{{return_line_break_at_23_char(item['code'])}}};\n"
+            mermaid_chart += "    end\n"
 
-        # Add target cubes
+        # Add target cubes and items in subgraphs
         for node_id, node in target_cubes:
-            mermaid_chart += f"    {node_id}((\"{return_line_break_at_23_char(node['name'])}\"));\n"
+            # Create a subgraph for each target cube with its items
+            mermaid_chart += f"    subgraph {node_id}_group[\"{node['name']}\"];\n"
+            mermaid_chart += f"        {node_id}((\"{return_line_break_at_23_char(node['name'])}\"));\n"
+
+            # Add items that belong to this cube in the subgraph
+            for item_id, item, parent_node_id in target_items:
+                if parent_node_id == node_id:
+                    mermaid_chart += f"        {item_id}{{{return_line_break_at_23_char(item['code'])}}};\n"
+                    # Connect target item to target cube within the subgraph
+                    if f"    {item_id} --> {node_id};\n" not in mermaid_chart:
+                        mermaid_chart += f"        {item_id} --> {node_id};\n"
+
+            mermaid_chart += "    end\n"
 
         # Connect target items to target cubes
         for item_id, item, node_id in target_items:
