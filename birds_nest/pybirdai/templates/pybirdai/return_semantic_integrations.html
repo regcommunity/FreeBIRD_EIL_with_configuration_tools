@@ -35,9 +35,19 @@ limitations under the License.
 
             <button type="submit" class="filter-button">Apply Filters</button>
         </form>
-        <div class="table-controls" style="flex-shrink: 0; margin-top: 20px;">
-            <button onclick="addRow()" class="table-control-btn" style="padding: 8px 16px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px;">Add Row</button>
-            <button onclick="addVariable()" class="table-control-btn" style="padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Add Variable</button>
+        <div class="table-controls" style="flex-shrink: 0; margin-top: 20px; display: flex; flex-wrap: wrap; gap: 15px; justify-content: space-between;">
+            <div class="button-group" style="display: flex; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 10px;">
+                <button onclick="addRow()" class="table-control-btn" style="padding: 10px 16px; background-color: #2E7D32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;">Add Mapping Row</button>
+                <button onclick="editRow()" class="table-control-btn" style="padding: 10px 16px; background-color: #2E7D32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;">Edit Mapping Row</button>
+                <button onclick="deleteRow()" class="table-control-btn" style="padding: 10px 16px; background-color: #C62828; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;">Delete Mapping Row</button>
+            </div>
+            <div style="border: 1px solid #ccc; border-radius: 6px; padding: 10px;">
+                <button onclick="duplicateMapping()" class="table-control-btn" style="padding: 10px 16px; background-color: #2E7D32; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500; align-self: flex-start;">Duplicate Mapping</button>
+            </div>
+            <div class="button-group" style="display: flex; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 10px;">
+                <button onclick="addTargetVariable()" class="table-control-btn" style="padding: 10px 16px; background-color: #E65100; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;">Add Target Variable</button>
+                <button onclick="addSourceVariable()" class="table-control-btn" style="padding: 10px 16px; background-color: #0277BD; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background-color 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: 500;">Add Source Variable</button>
+            </div>
         </div>
     </div>
 
@@ -254,20 +264,186 @@ function addRow() {
     modal.style.display = 'block';
 }
 
-function addVariable() {
+function editRow() {
+    // Get the selected row
+    const selectedRow = document.querySelector('tr[data-row].selected');
+
+    if (!selectedRow) {
+        alert('Please select a row to edit first.');
+        return;
+    }
+
+    const rowIndex = Array.from(selectedRow.parentNode.children).indexOf(selectedRow);
+
+    // Open the add row modal but populate it with existing data
+    const modal = document.getElementById('addRowModal');
+    modal.style.display = 'block';
+
+    // Populate form with existing data
+    const columns = selectedRow.querySelectorAll('td');
+    const sourceSelects = document.querySelectorAll('.source-column select');
+    const targetSelects = document.querySelectorAll('.target-column select');
+
+    // Populate source fields
+    sourceSelects.forEach((select, index) => {
+        const cellValue = columns[index].textContent;
+        const matchingOption = Array.from(select.options).find(option => option.textContent === cellValue);
+        if (matchingOption) {
+            select.value = matchingOption.value;
+        }
+    });
+
+    // Populate target fields
+    targetSelects.forEach((select, index) => {
+        const cellIndex = sourceSelects.length + index;
+        if (cellIndex < columns.length) {
+            const cellValue = columns[cellIndex].textContent;
+            const matchingOption = Array.from(select.options).find(option => option.textContent === cellValue);
+            if (matchingOption) {
+                select.value = matchingOption.value;
+            }
+        }
+    });
+
+    // Change the submit button to update instead of add
+    const submitButton = document.querySelector('#addRowForm .submit-button');
+    submitButton.textContent = 'Update Row';
+
+    // Store the row index as a data attribute
+    document.getElementById('addRowForm').dataset.editRowIndex = rowIndex;
+}
+
+function deleteRow() {
+    // Get the selected row
+    const selectedRow = document.querySelector('tr[data-row].selected');
+
+    if (!selectedRow) {
+        alert('Please select a row to delete first.');
+        return;
+    }
+
+    if (confirm('Are you sure you want to delete this mapping row?')) {
+        const rowIndex = Array.from(selectedRow.parentNode.children).indexOf(selectedRow);
+        const mappingId = document.getElementById('mappingSelect').value;
+
+        // Get the CSRF token from the cookie
+        const csrftoken = getCookie('csrftoken');
+
+        // Send delete request to server
+        fetch('/pybirdai/delete_mapping_row/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                mapping_id: mappingId,
+                row_index: rowIndex
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                selectedRow.remove();
+                alert('Row deleted successfully.');
+            } else {
+                alert('Error deleting row: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while deleting the row.');
+        });
+    }
+}
+
+function duplicateMapping() {
+    const mappingId = document.getElementById('mappingSelect').value;
+    const newMappingName = prompt('Enter a name for the new mapping:');
+
+    if (!newMappingName) return;
+
+    // Get the CSRF token from the cookie
+    const csrftoken = getCookie('csrftoken');
+
+    fetch('/pybirdai/duplicate_mapping/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            source_mapping_id: mappingId,
+            new_mapping_name: newMappingName
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Mapping duplicated successfully.');
+            location.reload();
+        } else {
+            alert('Error duplicating mapping: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while duplicating the mapping.');
+    });
+}
+
+function addTargetVariable() {
     const modal = document.getElementById('addVariableModal');
     modal.style.display = 'block';
     populateRowSelect();
 }
 
+function addSourceVariable() {
+    const modal = document.getElementById('addVariableModal');
+    modal.style.display = 'block';
+    populateRowSelect();
+
+    // Set a flag to indicate this is a source variable
+    document.getElementById('addVariableForm').dataset.isSource = 'true';
+}
+
 function closeModal() {
     const modal = document.getElementById('addRowModal');
     modal.style.display = 'none';
+
+    // Reset the form
+    document.getElementById('addRowForm').reset();
+    delete document.getElementById('addRowForm').dataset.editRowIndex;
+
+    // Reset the submit button text
+    const submitButton = document.querySelector('#addRowForm .submit-button');
+    submitButton.textContent = 'Add Row';
 }
 
 function closeVariableModal() {
     const modal = document.getElementById('addVariableModal');
     modal.style.display = 'none';
+
+    // Reset the form
+    document.getElementById('addVariableForm').reset();
+    delete document.getElementById('addVariableForm').dataset.isSource;
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 
 function submitVariableForm(event) {
@@ -275,29 +451,15 @@ function submitVariableForm(event) {
 
     const form = document.getElementById('addVariableForm');
     const formData = new FormData(form);
+    const isSource = form.dataset.isSource === 'true';
 
     const data = {
         mapping_id: document.getElementById('mappingSelect').value,
         member_mapping_row: formData.get('selectedRow'),
         variable: formData.get('variable'),
         members: Array.from(form.querySelector('#memberSelect').selectedOptions).map(option => option.value),
-        is_source: 'false'
+        is_source: isSource ? 'true' : 'false'
     };
-    // Get the CSRF token from the cookie
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
 
     const csrftoken = getCookie('csrftoken');
 
@@ -322,6 +484,7 @@ function submitVariableForm(event) {
         console.error('Error:', error);
     });
 }
+
 function submitForm(event) {
     event.preventDefault();
 
@@ -329,8 +492,10 @@ function submitForm(event) {
     const formData = new FormData(form);
     const sourceData = {};
     const targetData = {};
+    const editRowIndex = form.dataset.editRowIndex;
+    const isEdit = editRowIndex !== undefined;
 
-    // Get the CSRF token from the cookie
+    // Get the CSRF token
     const csrftoken = getCookie('csrftoken');
 
     // Add CSRF token to the request headers
@@ -338,12 +503,6 @@ function submitForm(event) {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrftoken
     });
-
-    function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-    }
 
     // Separate source and target values
     for(let [key, value] of formData.entries()) {
@@ -370,11 +529,15 @@ function submitForm(event) {
       }
     };
 
-    fetch('/pybirdai/edit_mapping_endpoint/', {
+    // If we're editing, add the row index
+    if (isEdit) {
+        data.row_index = editRowIndex;
+    }
+
+    const endpoint = isEdit ? '/pybirdai/update_mapping_row/' : '/pybirdai/edit_mapping_endpoint/';
+
+    fetch(endpoint, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
         mode: "same-origin",
         headers: headers,
         body: JSON.stringify(data)
@@ -382,174 +545,359 @@ function submitForm(event) {
     .then(response => response.json())
     .then(data => {
         closeModal();
-        // Optionally refresh the page or update the table
+        // Refresh the page to show the updated data
         location.reload();
     })
     .catch((error) => {
         console.error('Error:', error);
     });
 }
+
+// Add event listeners for selecting rows
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.querySelector('.member-mapping-table');
+
+    table.addEventListener('click', function(e) {
+        const row = e.target.closest('tr[data-row]');
+        if (row) {
+            // Clear any existing selection
+            const selectedRows = table.querySelectorAll('tr.selected');
+            selectedRows.forEach(r => r.classList.remove('selected'));
+
+            // Add selected class to the clicked row
+            row.classList.add('selected');
+        }
+    });
+});
 </script>
 <style>
-    .pagination {
-        margin-top: 20px;
-    }
-    table {
+    /* Main table styles */
+    .member-mapping-table {
         border-collapse: collapse;
+        width: 100%;
+        min-width: 2000px;
     }
-    th, td {
+
+    .member-mapping-table th,
+    .member-mapping-table td {
         border: 1px solid #ddd;
-        padding: 8px;
+        padding: 12px;
         text-align: left;
     }
-    th {
+
+    .member-mapping-table th {
         background-color: #f2f2f2;
+        position: sticky;
+        top: 0;
+        font-weight: 600;
+        color: #345;
     }
 
-    /* Add new filter styles */
-    .filters {
-        margin: 20px 0;
-        padding: 15px;
-        background-color: #f8f9fa;
-        border-radius: 5px;
-    }
-
-    .filters form {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 15px;
-        align-items: flex-end;
-    }
-
-    .filter-group {
-        flex: 1;
-        min-width: 200px;
-    }
-
-    .filters label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-    }
-
-    .filters select {
-        padding: 6px 12px;
-        border: 1px solid #ced4da;
-        border-radius: 4px;
-        width: 100%;
-    }
-    .filter-button, .clear-button {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        text-decoration: none;
-        display: inline-block;
-    }
-
-    .filter-button {
-        background-color: #007bff;
-        color: white;
-    }
-
-    .clear-button {
-        background-color: #6c757d;
-        color: white;
-    }
-
-    .filter-button:hover {
-        background-color: #0056b3;
-    }
-
-    .clear-button:hover {
-        background-color: #5a6268;
-    }
-
-    .create-button {
-        margin-bottom: 20px;
-        padding: 8px 16px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-
-    .create-button:hover {
-        background-color: #45a049;
-    }
-
-    .modal {
+    /* Variable dropdown styling */
+    #variableDropdownMenu {
         display: none;
         position: absolute;
-        z-index: 1;
+        background-color: white;
+        border: 1px solid #cfdbe6;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .variable-search {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .variable-search input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #cfdbe6;
+        border-radius: 4px;
+    }
+
+    .variable-option {
+        padding: 10px 15px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .variable-option:hover {
+        background-color: #f5f8fa;
+    }
+
+    /* Row selection styling */
+    tr[data-row].selected {
+        background-color: #e6f3ff;
+        border-left: 3px solid #4a90e2;
+    }
+
+    tr[data-row]:hover {
+        background-color: #f8f9fa;
+        cursor: pointer;
+    }
+
+    /* Modal styles enhancement */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
         left: 0;
         top: 0;
         width: 100%;
-        height: 120%;
-        background-color: rgba(0,0,0,0.4);
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.5);
     }
 
     .modal-content {
         background-color: #fefefe;
-        margin: 5% auto;
-        padding: 40px;
-        border: 1px solid #888;
+        margin: 3% auto;
+        padding: 30px;
+        border: 1px solid #e9ecef;
         width: 80%;
         max-width: 800px;
         border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
 
-    .form-group {
+    /* Search container styles */
+    .search-container {
+        position: relative;
         margin-bottom: 15px;
     }
 
-    .form-group label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-    }
-
-    .form-group input,
-    .form-group select {
+    .search-container input {
         width: 100%;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        padding: 10px 12px;
+        border: 1px solid #cfdbe6;
+        border-radius: 6px;
+        font-size: 14px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
     }
 
-    .form-buttons {
-        margin-top: 20px;
-        text-align: right;
+    .search-container input:focus {
+        border-color: #4a90e2;
+        outline: none;
     }
+</style>
+<style>
+.pagination {
+    margin-top: 20px;
+}
+table {
+    border-collapse: collapse;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #f2f2f2;
+}
 
-    .form-buttons button {
-        margin-left: 10px;
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-    }
+/* Add new filter styles */
+.filters {
+    background-color: #eef2f7;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
 
-    .submit-button {
-        background-color: #4CAF50;
-        color: white;
-    }
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-end;
+}
 
-    .cancel-button {
-        background-color: #f44336;
-        color: white;
-    }
+.filter-group {
+    flex: 1;
+    min-width: 220px;
+}
 
-    .variable-dropdown-menu {
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .variable-option {
-        padding: 8px;
-        cursor: pointer;
-    }
-    .variable-option:hover {
-        background-color: #f5f5f5;
-    }
+.filter-group label {
+    color: #345;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.filter-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cfdbe6;
+    border-radius: 6px;
+    background-color: white;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    transition: border-color 0.3s ease;
+}
+
+.filter-group select:focus {
+    border-color: #4a90e2;
+    outline: none;
+}
+
+.filter-button, .clear-button {
+    padding: 12px 20px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-decoration: none;
+    display: inline-block;
+}
+
+.filter-button {
+    background-color: #4a90e2;
+    color: white;
+}
+
+.filter-button:hover {
+    background-color: #3a7bc8;
+    transform: translateY(-2px);
+}
+
+.clear-button {
+    background-color: #f5f5f5;
+    color: #555;
+}
+
+.clear-button:hover {
+    background-color: #e5e5e5;
+    transform: translateY(-2px);
+}
+
+.create-button {
+    margin-bottom: 20px;
+    padding: 8px 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.create-button:hover {
+    background-color: #45a049;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 3% auto;
+    padding: 30px;
+    border: 1px solid #e9ecef;
+    width: 80%;
+    max-width: 800px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #345;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #cfdbe6;
+    border-radius: 6px;
+    background-color: white;
+    font-size: 15px;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+    outline: none;
+}
+
+.form-buttons {
+    margin-top: 20px;
+    text-align: right;
+}
+
+.form-buttons button {
+    margin-left: 10px;
+    padding: 12px 24px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    font-size: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.submit-button {
+    background-color: #28a745;
+    color: white;
+}
+
+.submit-button:hover {
+    background-color: #218838;
+    transform: translateY(-2px);
+}
+
+.cancel-button {
+    background-color: #dc3545;
+    color: white;
+}
+
+.cancel-button:hover {
+    background-color: #c82333;
+    transform: translateY(-2px);
+}
+
+.variable-dropdown-menu {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.variable-option {
+    padding: 8px;
+    cursor: pointer;
+}
+.variable-option:hover {
+    background-color: #f5f5f5;
+}
+
+/* New styles for row selection */
+tr[data-row].selected {
+    background-color: #e6f3ff;
+    border-left: 3px solid #4a90e2;
+}
+
+tr[data-row]:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
 </style>
 {% endblock %}

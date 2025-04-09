@@ -118,6 +118,10 @@ urlpatterns = [
     path('add_variable_endpoint/', views.add_variable_endpoint, name='add_variable_endpoint'),
     path('get_domain_members/<str:variable_id>/', views.get_domain_members, name='get_domain_members'),
     path('get_mapping_details/<str:mapping_id>/', views.get_mapping_details, name='get_mapping_details'),
-
-
+    path('delete_mapping_row/', views.delete_mapping_row, name='delete_mapping_row'),
+    path('duplicate_mapping/', views.duplicate_mapping, name='duplicate_mapping'),
+    path('update_mapping_row/', views.update_mapping_row, name='update_mapping_row'),
+    path('return_cubelink_visualisation/', views.return_cubelink_visualisation, name='return_cubelink_visualisation'),
+    # path('return_cubelink_visualisation/?cube_id', views.return_cubelink_visualisation, name='return_cubelink_visualisation'),
+    path('return_cubelink_visualisation/?cube_id=<int:cube_id>&join_identifier=<str:join_identifier>&in_md=<str:in_md>', views.return_cubelink_visualisation, name='return_cubelink_visualisation'),
 ]

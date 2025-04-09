@@ -124,7 +124,7 @@ def return_line_break_at_23_char(string):
 
 class NetworkGraphGenerationService:
     @staticmethod
-    def create_graph(json_data, file_name=""):
+    def create_graph(json_data, file_name="", in_md=False):
         """Create a Mermaid chart visualization from JSON data"""
         # Begin building the Mermaid flowchart definition
         mermaid_chart = "```mermaid\ngraph LR\n"  # Changed to TB (top to bottom)
@@ -249,7 +249,7 @@ class NetworkGraphGenerationService:
         mermaid_chart += "```\n\n"
 
         # Add a title section before the Mermaid chart
-        title = f"# Mapping Visualization: {json_data['nodes'][1]['name']} to {json_data['nodes'][0]['name']}\n\n"
+        # title = f"# Mapping Visualization: {json_data['nodes'][1]['name']} to {json_data['nodes'][0]['name']}\n\n"
 
         # Complete markdown content
         markdown_content = mermaid_chart.replace("```mermaid","").replace("```","")
@@ -258,6 +258,7 @@ class NetworkGraphGenerationService:
         <!doctype html>
         <html lang="en">
           <body>
+          <h1 style="font-family: Arial, sans-serif; color: #333; margin: 20px 0; text-align: center;">{file_name.replace('.html', '')}</h1>
             <pre class="mermaid">
 {markdown_content}
             </pre>
@@ -269,40 +270,72 @@ class NetworkGraphGenerationService:
         """
 
         # Save to file
-        output_file = ""
         output_folder = "results/generated_linking_visualisations/"
-        if file_name == "":
-            output_file = f"{json_data['nodes'][1]['name']}_to_{json_data['nodes'][0]['name']}.html"
-        else:
-            output_file = file_name
+        output_file = file_name
 
         with open(output_folder+output_file, 'w') as f:
             f.write(html_content)
 
-        return output_file
+        if in_md:
+            return markdown_content
+        return html_content
+
+
+def process_cube_visualization(cube_id, join_identifier=None, in_md=False):
+    """
+    Process cube visualization for a given cube_id and optional join_identifier
+
+    Args:
+        cube_id: The ID of the cube to visualize
+        join_identifier: Optional filter for join identifiers
+
+    Returns:
+        The file path of the generated visualization
+    """
+    # Get all cube links for this cube
+    all_cube_links = DatabaseConnector.get_cube_links_for_cube(cube_id)
+
+    # Filter cube links based on join identifier
+    cube_links = []
+    for cube_link in all_cube_links:
+        if join_identifier is None and not cube_link.join_identifier:
+            # If no join_identifier was specified and this link has none
+            cube_links.append(cube_link)
+        elif join_identifier and cube_link.join_identifier == join_identifier:
+            # If join_identifier was specified and matches this link
+            cube_links.append(cube_link)
+
+    # Process the filtered cube links
+    json_list = []
+    for cube_link in cube_links:
+        linked_cube_structure_items = DatabaseConnector.get_linked_cube_structure_items(
+            cube_link)
+        json_list.append(DatabaseConnector.create_visualization_json(linked_cube_structure_items))
+
+    # Merge all the JSONs for this join identifier
+    merged_json = {'nodes': [], 'edges': []}
+    for json_data in json_list:
+        merged_json['nodes'].extend(json_data['nodes'])
+        merged_json['edges'].extend(json_data['edges'])
+
+    # Generate a filename that includes the join identifier
+    if join_identifier is None:
+        mermaid_file_name = f"{cube_id}_no_join_identifier.html"
+    else:
+        # Sanitize join identifier for filename
+        safe_join_id = ''.join(c if c.isalnum() else '_' for c in join_identifier)
+        mermaid_file_name = f"{cube_id}_{safe_join_id}.html"
+
+    # Create the visualization using the identifier-specific filename
+    return NetworkGraphGenerationService.create_graph(merged_json, mermaid_file_name, in_md=in_md)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python visualisation_service.py <cube_id>")
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python visualisation_service.py <cube_id> [<join_identifier>]")
         sys.exit(1)
 
-    # cube_id = sys.argv[1]
+    cube_id = sys.argv[1]
+    join_identifier = sys.argv[2] if len(sys.argv) == 3 else None
 
-    links = DatabaseConnector.get_all_cube_links()
-    cube_ids = [link.foreign_cube_id.cube_id for link in links]
-    for cube_id in set(cube_ids):
-        cube_links = DatabaseConnector.get_cube_links_for_cube(cube_id)
-        json_list = []
-        for cube_link in cube_links:
-            linked_cube_structure_items = DatabaseConnector.get_linked_cube_structure_items(
-                cube_link)
-            json_list.append(DatabaseConnector.create_visualization_json(linked_cube_structure_items))
-
-        # Merge all the JSONs
-        merged_json = {'nodes': [], 'edges': []}
-        for json_data in json_list:
-            merged_json['nodes'].extend(json_data['nodes'])
-            merged_json['edges'].extend(json_data['edges'])
-        jason = merged_json
-        file_path = NetworkGraphGenerationService.create_graph(jason, "")
+    html_content = process_cube_visualization(cube_id, join_identifier)

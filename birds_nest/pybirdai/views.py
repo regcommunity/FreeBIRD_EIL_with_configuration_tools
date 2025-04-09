@@ -74,6 +74,11 @@ from .utils.mapping_library import (
 )
 import time
 from datetime import datetime
+from django.views.decorators.clickjacking import xframe_options_exempt
+
+
+
+
 from typing import Dict, List, Set, Tuple, Any, Optional
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -577,6 +582,7 @@ def edit_member_mapping_items(request):
     }
     return render(request, 'pybirdai/edit_member_mapping_items.html', context)
 
+@xframe_options_exempt
 def edit_cube_links(request):
     # Get unique values for filters
     foreign_cubes = CUBE_LINK.objects.values_list('foreign_cube_id', flat=True).distinct()
@@ -2469,3 +2475,177 @@ def get_mapping_details(request, mapping_id):
             'status': 'error',
             'message': str(e)
         })
+
+def return_cubelink_visualisation(request):
+    from pybirdai.utils import visualisation_service
+    """
+    View function for displaying cube link visualizations.
+
+    Takes request parameters "cube_link_id" and "join_identifier" to
+    generate and display a visualization of cube links.
+
+    Args:
+        request: HTTP request object with query parameters
+
+    Returns:
+        HttpResponse: Rendered HTML visualization
+    """
+    if request.method == 'GET':
+        cube_id = request.GET.get('cube_id', '')
+        join_identifier = request.GET.get('join_identifier', '').replace("+"," ")
+        in_md = eval(request.GET.get('in_md', "false").capitalize())
+        print(cube_id,join_identifier,in_md)
+
+        if cube_id:
+            html_content = visualisation_service.process_cube_visualization(cube_id, join_identifier, in_md)
+            return HttpResponse(html_content)
+        else:
+            return HttpResponseBadRequest("Missing required parameter: cube_link_id")
+    else:
+        return HttpResponseBadRequest("Only GET requests are supported")
+
+def delete_mapping_row(request):
+    """View function for handling the deletion of a mapping row."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        mapping_id = data.get('mapping_id')
+        row_index = data.get('row_index')
+
+        # Get the mapping definition
+        mapping_def = MAPPING_DEFINITION.objects.get(mapping_id=mapping_id)
+
+        # Find all member mapping items in the specified row
+        member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(
+            member_mapping_id=mapping_def.member_mapping_id,
+            member_mapping_row=row_index
+        )
+
+        # Delete the items
+        member_mapping_items.delete()
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def duplicate_mapping(request):
+    """View function for duplicating an existing mapping."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        source_mapping_id = data.get('source_mapping_id')
+        new_mapping_name = data.get('new_mapping_name')
+
+        # Get timestamp for new instances
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        # Get source mapping
+        source_mapping = MAPPING_DEFINITION.objects.get(mapping_id=source_mapping_id)
+
+        # Copy member mapping
+        new_member_mapping = MEMBER_MAPPING.objects.create(
+            member_mapping_id=f"{source_mapping.member_mapping_id.member_mapping_id}__{timestamp}",
+            code=f"{source_mapping.member_mapping_id.code}__{timestamp}",
+            name=f"{new_mapping_name} - Members"
+        )
+
+        # Copy variable mapping
+        new_variable_mapping = VARIABLE_MAPPING.objects.create(
+            variable_mapping_id=f"{source_mapping.variable_mapping_id.variable_mapping_id}__{timestamp}",
+            code=f"{source_mapping.variable_mapping_id.code}__{timestamp}",
+            name=f"{new_mapping_name} - Variables"
+        )
+
+        # Create new mapping definition
+        new_mapping = MAPPING_DEFINITION.objects.create(
+            mapping_id=f"{source_mapping.mapping_id}__{timestamp}",
+            code=f"{source_mapping.code}__{timestamp}",
+            name=new_mapping_name,
+            member_mapping_id=new_member_mapping,
+            variable_mapping_id=new_variable_mapping
+        )
+
+        # Copy variable mapping items
+        for item in VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=source_mapping.variable_mapping_id):
+            VARIABLE_MAPPING_ITEM.objects.create(
+                variable_mapping_id=new_variable_mapping,
+                variable_id=item.variable_id,
+                is_source=item.is_source
+            )
+
+        # Copy member mapping items
+        for item in MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=source_mapping.member_mapping_id):
+            MEMBER_MAPPING_ITEM.objects.create(
+                member_mapping_id=new_member_mapping,
+                member_mapping_row=item.member_mapping_row,
+                variable_id=item.variable_id,
+                member_id=item.member_id,
+                is_source=item.is_source
+            )
+
+        # Create mapping to cube with version suffix
+        MAPPING_TO_CUBE.objects.create(
+            mapping_id=new_mapping,
+            cube_mapping_id=f"{new_mapping.code}_v1"
+        )
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def update_mapping_row(request):
+    """View function for updating a mapping row."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        mapping_id = data.get('mapping_id')
+        row_index = data.get('row_index')
+        source_data = data.get('source_data', {})
+        target_data = data.get('target_data', {})
+
+        # Get mapping definition
+        mapping_def = MAPPING_DEFINITION.objects.get(mapping_id=mapping_id)
+
+        # Delete existing row items
+        MEMBER_MAPPING_ITEM.objects.filter(
+            member_mapping_id=mapping_def.member_mapping_id,
+            member_mapping_row=row_index
+        ).delete()
+
+        # Add new source items
+        for variable, member in zip(source_data.get('variabless', []), source_data.get('members', [])):
+            if member:
+                variable_obj = VARIABLE.objects.get(variable_id=variable)
+                member_obj = MEMBER.objects.get(member_id=member)
+
+                MEMBER_MAPPING_ITEM.objects.create(
+                    member_mapping_id=mapping_def.member_mapping_id,
+                    member_mapping_row=row_index,
+                    variable_id=variable_obj,
+                    member_id=member_obj,
+                    is_source=True
+                )
+
+        # Add new target items
+        for variable, member in zip(target_data.get('variablses', []), target_data.get('members', [])):
+            if member:
+                variable_obj = VARIABLE.objects.get(variable_id=variable)
+                member_obj = MEMBER.objects.get(member_id=member)
+
+                MEMBER_MAPPING_ITEM.objects.create(
+                    member_mapping_id=mapping_def.member_mapping_id,
+                    member_mapping_row=row_index,
+                    variable_id=variable_obj,
+                    member_id=member_obj,
+                    is_source=False
+                )
+
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
