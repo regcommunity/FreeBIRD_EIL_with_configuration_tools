@@ -91,29 +91,69 @@ limitations under the License.
         </div>
     </div>
 
-    <div id="addVariableModal" class="modal">
+    <div id="addSourceVariableModal" class="modal">
         <div class="modal-content">
-            <h2 style="margin-bottom: 30px; font-size: 28px;">Add Variable and Members</h2>
-            <form id="addVariableForm" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column;" onsubmit="submitVariableForm(event)">
-                <div class="form-group" id="form-variableSelect">
-                    <label for="variableSelect">Select Variable:</label>
-                    <select name="variable" id="variableSelect" class="variable-dropdown-menu" style="width: 100%;" onchange="variableSelected(this.value)">
-                        {% for variable in available_variables %}
+            <h2 style="margin-bottom: 30px; font-size: 28px;">Add Source Variable and Members</h2>
+            <form id="addSourceVariableForm" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column;" onsubmit="submitSourceVariableForm(event)">
+                <div class="form-group" id="form-sourceVariableSelect">
+                    <label for="sourceVariableSelect">Select Variable:</label>
+                    <select name="variable" id="sourceVariableSelect" class="variable-dropdown-menu" style="width: 100%;" onchange="sourceVariableSelected(this.value)">
+                        {% for variable in source_variables %}
                             <option value="{{ variable }}">{{ variable }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
-                <div class="form-group" id="form-memberSelect">
+                <div class="form-group" id="form-sourceMemberSelect">
+                    <label for="sourceMemberSelect">Select Member:</label>
+                    <div class="search-container" style="margin-bottom: 10px;">
+                        <input type="text" id="sourceMemberSearch" onkeyup="filterSourceMembers()" placeholder="Search members..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <select name="members" id="sourceMemberSelect" multiple style="padding: 12px; height: 200px;">
+                    </select>
                 </div>
                 <div class="form-group">
-                    <label for="rowSelect">Select Row to Update:</label>
-                    <select name="selectedRow" id="rowSelect" style="padding: 12px;">
+                    <label for="sourceRowSelect">Select Row to Update:</label>
+                    <select name="selectedRow" id="sourceRowSelect" style="padding: 12px;">
                     </select>
                 </div>
                 <div class="form-buttons" style="width: 100%; padding: 20px; border-top: 1px solid #ddd; margin-top: auto;">
-                    <button type="button" onclick="closeVariableModal()" class="cancel-button" style="padding: 12px 24px; margin-right: 15px;">Cancel</button>
-                    <button type="submit" class="submit-button" style="padding: 12px 24px;">Add Variable</button>
+                    <button type="button" onclick="closeSourceVariableModal()" class="cancel-button" style="padding: 12px 24px; margin-right: 15px;">Cancel</button>
+                    <button type="submit" class="submit-button" style="padding: 12px 24px;">Add Source Variable</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addTargetVariableModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 30px; font-size: 28px;">Add Target Variable and Members</h2>
+            <form id="addTargetVariableForm" style="max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column;" onsubmit="submitTargetVariableForm(event)">
+                <div class="form-group" id="form-targetVariableSelect">
+                    <label for="targetVariableSelect">Select Variable:</label>
+                    <select name="variable" id="targetVariableSelect" class="variable-dropdown-menu" style="width: 100%;" onchange="targetVariableSelected(this.value)">
+                        {% for variable in reference_variables %}
+                            <option value="{{ variable }}">{{ variable }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group" id="form-targetMemberSelect">
+                    <label for="targetMemberSelect">Select Member:</label>
+                    <div class="search-container" style="margin-bottom: 10px;">
+                        <input type="text" id="targetMemberSearch" onkeyup="filterTargetMembers()" placeholder="Search members..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    </div>
+                    <select name="members" id="targetMemberSelect" multiple style="padding: 12px; height: 200px;">
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="targetRowSelect">Select Row to Update:</label>
+                    <select name="selectedRow" id="targetRowSelect" style="padding: 12px;">
+                    </select>
+                </div>
+                <div class="form-buttons" style="width: 100%; padding: 20px; border-top: 1px solid #ddd; margin-top: auto;">
+                    <button type="button" onclick="closeTargetVariableModal()" class="cancel-button" style="padding: 12px 24px; margin-right: 15px;">Cancel</button>
+                    <button type="submit" class="submit-button" style="padding: 12px 24px;">Add Target Variable</button>
                 </div>
             </form>
         </div>
@@ -136,7 +176,7 @@ limitations under the License.
                     {% for row in table_data.rows %}
                     <tr data-row>
                         {% for col_header, value in row.items %}
-                        <td style="white-space: pre-wrap; word-wrap: break-word; word-break: break-all;">{{ value }}</td>
+                        <td style="white-space: word-wrap: break-word; word-break: break-all;">{{ value }}</td>
                         {% endfor %}
                     </tr>
                     {% endfor %}
@@ -147,32 +187,50 @@ limitations under the License.
 </div>
 <script>
 
-window.addEventListener('load', function() {
-    var select = document.getElementById('variableSelect');
-    if(select.value) {
-        variableSelected(select.value);
-    }
-    populateRowSelect();
-    setupVariableDropdown();
-});
+function sourceVariableSelected(selectedVariable) {
+    const memberSelect = document.getElementById('sourceMemberSelect');
+    memberSelect.innerHTML = '';
 
-function populateRowSelect() {
-    const rowSelect = document.getElementById('rowSelect');
-    const rows = document.querySelectorAll('[data-row]');
-    rowSelect.innerHTML = '';
+    fetch(`/pybirdai/get_domain_members/${selectedVariable}`)
+        .then(response => response.json())
+        .then(data => {
+            // Sort members by name before adding to select
+            data.members.sort((a, b) => a.name.localeCompare(b.name));
 
-    rows.forEach((row, index) => {
-        const option = document.createElement('option');
-        option.value = index;
-        option.textContent = `Row ${index}`;
-        rowSelect.appendChild(option);
-    });
+            data.members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.member_id;
+                option.textContent = `${member.name} (${member.code})`;
+                memberSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error fetching source members:', error));
 }
 
-function filterMembers() {
-    var input = document.getElementById("memberSearch");
+function targetVariableSelected(selectedVariable) {
+    const memberSelect = document.getElementById('targetMemberSelect');
+    memberSelect.innerHTML = '';
+
+    fetch(`/pybirdai/get_domain_members/${selectedVariable}`)
+        .then(response => response.json())
+        .then(data => {
+            // Sort members by name before adding to select
+            data.members.sort((a, b) => a.name.localeCompare(b.name));
+
+            data.members.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.member_id;
+                option.textContent = `${member.name} (${member.code})`;
+                memberSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error fetching target members:', error));
+}
+
+function filterSourceMembers() {
+    var input = document.getElementById("sourceMemberSearch");
     var filter = input.value.toUpperCase();
-    var select = document.getElementById("memberSelect");
+    var select = document.getElementById("sourceMemberSelect");
     var options = select.getElementsByTagName("option");
 
     for (var i = 0; i < options.length; i++) {
@@ -185,78 +243,102 @@ function filterMembers() {
     }
 }
 
-function setupVariableDropdown() {
-    const select = document.getElementById('variableSelect');
-    const dropdown = document.getElementById('variableDropdownMenu');
-    const options = document.getElementById('variableOptions');
+function filterTargetMembers() {
+    var input = document.getElementById("targetMemberSearch");
+    var filter = input.value.toUpperCase();
+    var select = document.getElementById("targetMemberSelect");
+    var options = select.getElementsByTagName("option");
 
-    select.addEventListener('click', function(e) {
-        e.preventDefault();
-        const rect = select.getBoundingClientRect();
-        dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
-        dropdown.style.left = rect.left + 'px';
-        dropdown.style.width = rect.width + 'px';
-        dropdown.style.display = 'block';
-
-        // Populate options
-        options.innerHTML = '';
-        Array.from(select.options).forEach(opt => {
-            const div = document.createElement('div');
-            div.className = 'variable-option';
-            div.textContent = opt.text;
-            div.onclick = function() {
-                select.value = opt.value;
-                dropdown.style.display = 'none';
-                variableSelected(opt.value);
-            };
-            options.appendChild(div);
-        });
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!dropdown.contains(e.target) && e.target !== select) {
-            dropdown.style.display = 'none';
-        }
-    });
-}
-
-function filterVariables() {
-    const input = document.getElementById('variableSearchInput');
-    const filter = input.value.toUpperCase();
-    const options = document.getElementById('variableOptions').getElementsByClassName('variable-option');
-
-    for (let option of options) {
-        const txtValue = option.textContent || option.innerText;
+    for (var i = 0; i < options.length; i++) {
+        var txtValue = options[i].text;
         if (txtValue.toUpperCase().indexOf(filter) > -1) {
-            option.style.display = '';
+            options[i].style.display = "";
         } else {
-            option.style.display = 'none';
+            options[i].style.display = "none";
         }
     }
 }
 
-function variableSelected(selectedVariable) {
-    const memberGroup = document.getElementById('form-memberSelect');
-    memberGroup.innerHTML = `<label for="memberSelect">Select Members:</label>
-         <div class="search-container" style="margin-bottom: 10px;">
-             <input type="text" id="memberSearch" onkeyup="filterMembers()" placeholder="Search members..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-         </div>
-         <select name="members" id="memberSelect" multiple style="padding: 12px; height: 200px;">
-         </select>`;
+function closeSourceVariableModal() {
+    const modal = document.getElementById('addSourceVariableModal');
+    modal.style.display = 'none';
+    document.getElementById('addSourceVariableForm').reset();
+}
 
-    fetch(`/pybirdai/get_domain_members/${selectedVariable}`)
-        .then(response => response.json())
-        .then(data => {
-            const select = document.getElementById('memberSelect');
-            data.members.forEach(member => {
-                const option = document.createElement('option');
-                option.value = member.member_id;
-                console.log(member)
-                option.textContent = `${member.name} (${member.code})`;
-                select.appendChild(option);
-            });
-        })
-        .catch(error => console.error('Error:', error));
+function closeTargetVariableModal() {
+    const modal = document.getElementById('addTargetVariableModal');
+    modal.style.display = 'none';
+    document.getElementById('addTargetVariableForm').reset();
+}
+
+function submitSourceVariableForm(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('addSourceVariableForm');
+    const formData = new FormData(form);
+
+    const data = {
+        mapping_id: document.getElementById('mappingSelect').value,
+        member_mapping_row: formData.get('selectedRow'),
+        variable: formData.get('variable'),
+        members: Array.from(form.querySelector('#sourceMemberSelect').selectedOptions).map(option => option.value),
+        is_source: true
+    };
+
+    const csrftoken = getCookie('csrftoken');
+
+    fetch("/pybirdai/add_variable_endpoint/", {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        closeSourceVariableModal();
+        location.reload();
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+    });
+}
+
+function submitTargetVariableForm(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('addTargetVariableForm');
+    const formData = new FormData(form);
+
+    const data = {
+        mapping_id: document.getElementById('mappingSelect').value,
+        member_mapping_row: formData.get('selectedRow'),
+        variable: formData.get('variable'),
+        members: Array.from(form.querySelector('#targetMemberSelect').selectedOptions).map(option => option.value),
+        is_source: false
+    };
+
+    const csrftoken = getCookie('csrftoken');
+
+    fetch("/pybirdai/add_variable_endpoint/", {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        closeTargetVariableModal();
+        location.reload();
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+    });
 }
 
 function addRow() {
@@ -274,33 +356,45 @@ function editRow() {
     }
 
     const rowIndex = Array.from(selectedRow.parentNode.children).indexOf(selectedRow);
+    const firstColumnValue = selectedRow.cells[0].textContent.trim();
 
     // Open the add row modal but populate it with existing data
     const modal = document.getElementById('addRowModal');
     modal.style.display = 'block';
 
+    // Change modal title to "Edit Mapping Row"
+    const modalTitle = modal.querySelector('h2');
+    if (modalTitle) {
+        modalTitle.textContent = 'Edit Mapping Row';
+    }
+
     // Populate form with existing data
     const columns = selectedRow.querySelectorAll('td');
-    const sourceSelects = document.querySelectorAll('.source-column select');
-    const targetSelects = document.querySelectorAll('.target-column select');
+    // Get all the column headers
+    const headers = Array.from(document.querySelectorAll('table.member-mapping-table th')).map(th => th.textContent.trim());
 
-    // Populate source fields
-    sourceSelects.forEach((select, index) => {
-        const cellValue = columns[index].textContent;
-        const matchingOption = Array.from(select.options).find(option => option.textContent === cellValue);
-        if (matchingOption) {
-            select.value = matchingOption.value;
-        }
-    });
+    // Iterate through each column in the selected row
+    columns.forEach((cell, columnIndex) => {
+        const headerName = headers[columnIndex];
+        const cellValue = cell.textContent.trim();
 
-    // Populate target fields
-    targetSelects.forEach((select, index) => {
-        const cellIndex = sourceSelects.length + index;
-        if (cellIndex < columns.length) {
-            const cellValue = columns[cellIndex].textContent;
-            const matchingOption = Array.from(select.options).find(option => option.textContent === cellValue);
+        // Find the select element for this header by ID or name
+        const select = document.getElementById(`${headerName}Select`) || document.querySelector(`select[name="${headerName}"]`);
+
+        if (select) {
+            // Find the option that matches the cell value and select it
+            const matchingOption = Array.from(select.options).find(option => option.textContent.trim() === cellValue);
             if (matchingOption) {
                 select.value = matchingOption.value;
+            } else {
+                // If exact match not found, try to find by contained text
+                const closeMatch = Array.from(select.options).find(option =>
+                    cellValue.includes(option.textContent.trim()) ||
+                    option.textContent.trim().includes(cellValue)
+                );
+                if (closeMatch) {
+                    select.value = closeMatch.value;
+                }
             }
         }
     });
@@ -310,7 +404,89 @@ function editRow() {
     submitButton.textContent = 'Update Row';
 
     // Store the row index as a data attribute
-    document.getElementById('addRowForm').dataset.editRowIndex = rowIndex;
+    document.getElementById('addRowForm').dataset.editRowIndex = firstColumnValue;
+
+    // Add a property to confirm on submit
+    document.getElementById('addRowForm').dataset.confirmOnSubmit = 'true';
+
+    // Modify the submitForm function to prompt the user
+    const originalSubmitForm = submitForm;
+    submitForm = function(event) {
+        event.preventDefault();
+        const form = document.getElementById('addRowForm');
+
+        if (form.dataset.editRowIndex !== undefined && form.dataset.confirmOnSubmit === 'true') {
+            if (!confirm('Do you want to update this mapping row?')) {
+                return;
+            }
+
+            // Directly update the row without deleting it first
+            const mappingId = document.getElementById('mappingSelect').value;
+            const csrftoken = getCookie('csrftoken');
+
+            // Get form data
+            const formData = new FormData(form);
+            const sourceData = {};
+            const targetData = {};
+
+            // Separate source and target values
+            for(let [key, value] of formData.entries()) {
+                if(document.querySelector('.source-column select[name="' + key + '"]')) {
+                    sourceData[key] = value;
+                } else {
+                    targetData[key] = value;
+                }
+            }
+
+            // Prepare data for update
+            const data = {
+                mapping_id: mappingId,
+                row_index: form.dataset.editRowIndex,
+                source_data: {
+                    member_mapping_row: sourceData,
+                    variabless: Object.keys(sourceData),
+                    members: Object.values(sourceData),
+                    is_source: true
+                },
+                target_data: {
+                    member_mapping_row: targetData,
+                    variablses: Object.keys(targetData),
+                    members: Object.values(targetData).map(v => v || null),
+                    is_source: false
+                }
+            };
+
+            // Send update request
+            fetch('/pybirdai/update_mapping_row/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Close modal and reload page to show the updated data
+                    closeModal();
+                    location.reload();
+                } else {
+                    alert('Error updating row: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the row.');
+            });
+
+            return;
+        }
+
+        // Call the original function for regular add operations
+        originalSubmitForm(event);
+    };
 }
 
 function deleteRow() {
@@ -323,7 +499,9 @@ function deleteRow() {
     }
 
     if (confirm('Are you sure you want to delete this mapping row?')) {
+      // Get the row index and also the value from the first cell
         const rowIndex = Array.from(selectedRow.parentNode.children).indexOf(selectedRow);
+        const firstColumnValue = selectedRow.cells[0].textContent.trim();
         const mappingId = document.getElementById('mappingSelect').value;
 
         // Get the CSRF token from the cookie
@@ -339,7 +517,7 @@ function deleteRow() {
             credentials: 'same-origin',
             body: JSON.stringify({
                 mapping_id: mappingId,
-                row_index: rowIndex
+                row_index: firstColumnValue
             })
         })
         .then(response => response.json())
@@ -394,19 +572,92 @@ function duplicateMapping() {
     });
 }
 
+window.addEventListener('load', function() {
+    // Already populate the selected variable in source variable dropdown
+    var sourceVariableSelect = document.getElementById('sourceVariableSelect');
+    if(sourceVariableSelect && sourceVariableSelect.value) {
+        sourceVariableSelected(sourceVariableSelect.value);
+
+        // Populate source members for the initially selected variable
+        fetch(`/pybirdai/get_domain_members/${sourceVariableSelect.value}`)
+            .then(response => response.json())
+            .then(data => {
+                const memberSelect = document.getElementById('sourceMemberSelect');
+                memberSelect.innerHTML = '';
+                // Sort members by name before adding to select
+                data.members.sort((a, b) => a.name.localeCompare(b.name));
+
+                data.members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.member_id;
+                    option.textContent = `${member.name} (${member.code})`;
+                    memberSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching source members:', error));
+    }
+
+    // Already populate the selected variable in target variable dropdown
+    var targetVariableSelect = document.getElementById('targetVariableSelect');
+    if(targetVariableSelect && targetVariableSelect.value) {
+        targetVariableSelected(targetVariableSelect.value);
+
+        // Populate target members for the initially selected variable
+        fetch(`/pybirdai/get_domain_members/${targetVariableSelect.value}`)
+            .then(response => response.json())
+            .then(data => {
+                const memberSelect = document.getElementById('targetMemberSelect');
+                memberSelect.innerHTML = '';
+                // Sort members by name before adding to select
+                data.members.sort((a, b) => a.name.localeCompare(b.name));
+
+                data.members.forEach(member => {
+                    const option = document.createElement('option');
+                    option.value = member.member_id;
+                    option.textContent = `${member.name} (${member.code})`;
+                    memberSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching target members:', error));
+    }
+});
+
 function addTargetVariable() {
-    const modal = document.getElementById('addVariableModal');
+    const modal = document.getElementById('addTargetVariableModal');
     modal.style.display = 'block';
-    populateRowSelect();
+
+    // Populate the target row select dropdown
+    const targetRowSelect = document.getElementById('targetRowSelect');
+    const rows = document.querySelectorAll('[data-row]');
+    targetRowSelect.innerHTML = '';
+
+    rows.forEach((row, index) => {
+        const option = document.createElement('option');
+        // Get the row_id value from the first cell of each row
+        const rowIdValue = row.cells[0].childNodes[0].textContent.trim()
+        option.value = rowIdValue;
+        option.textContent = `Row ${rowIdValue}`;
+        targetRowSelect.appendChild(option);
+    });
 }
 
 function addSourceVariable() {
-    const modal = document.getElementById('addVariableModal');
+    const modal = document.getElementById('addSourceVariableModal');
     modal.style.display = 'block';
-    populateRowSelect();
 
-    // Set a flag to indicate this is a source variable
-    document.getElementById('addVariableForm').dataset.isSource = 'true';
+    // Populate the source row select dropdown
+    const sourceRowSelect = document.getElementById('sourceRowSelect');
+    const rows = document.querySelectorAll('[data-row]');
+    sourceRowSelect.innerHTML = '';
+
+    rows.forEach((row, index) => {
+        const option = document.createElement('option');
+        // Get the row_id value from the first cell of each row
+        const rowIdValue = row.cells[0].childNodes[0].textContent.trim()
+        option.value = rowIdValue;
+        option.textContent = `Row ${rowIdValue}`;
+        sourceRowSelect.appendChild(option);
+    });
 }
 
 function closeModal() {
@@ -422,15 +673,6 @@ function closeModal() {
     submitButton.textContent = 'Add Row';
 }
 
-function closeVariableModal() {
-    const modal = document.getElementById('addVariableModal');
-    modal.style.display = 'none';
-
-    // Reset the form
-    document.getElementById('addVariableForm').reset();
-    delete document.getElementById('addVariableForm').dataset.isSource;
-}
-
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -444,45 +686,6 @@ function getCookie(name) {
         }
     }
     return cookieValue;
-}
-
-function submitVariableForm(event) {
-    event.preventDefault();
-
-    const form = document.getElementById('addVariableForm');
-    const formData = new FormData(form);
-    const isSource = form.dataset.isSource === 'true';
-
-    const data = {
-        mapping_id: document.getElementById('mappingSelect').value,
-        member_mapping_row: formData.get('selectedRow'),
-        variable: formData.get('variable'),
-        members: Array.from(form.querySelector('#memberSelect').selectedOptions).map(option => option.value),
-        is_source: isSource ? 'true' : 'false'
-    };
-
-    const csrftoken = getCookie('csrftoken');
-
-    // Add CSRF token to the request headers
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken
-    };
-
-    fetch("/pybirdai/add_variable_endpoint/", {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: headers,
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        closeVariableModal();
-        location.reload();
-    })
-    .catch((error) => {
-        console.error('Error:', error);
-    });
 }
 
 function submitForm(event) {
@@ -530,11 +733,11 @@ function submitForm(event) {
     };
 
     // If we're editing, add the row index
+    let endpoint = '/pybirdai/edit_mapping_endpoint/';
     if (isEdit) {
         data.row_index = editRowIndex;
+        endpoint = '/pybirdai/update_mapping_row/';
     }
-
-    const endpoint = isEdit ? '/pybirdai/update_mapping_row/' : '/pybirdai/edit_mapping_endpoint/';
 
     fetch(endpoint, {
         method: 'POST',
@@ -891,12 +1094,12 @@ th {
 
 /* New styles for row selection */
 tr[data-row].selected {
-    background-color: #e6f3ff;
-    border-left: 3px solid #4a90e2;
+    background-color: #FFFFCC;
+    border-left: 3px solid #000000;
 }
 
 tr[data-row]:hover {
-    background-color: #f8f9fa;
+    background-color: #FFFFD9;
     cursor: pointer;
 }
 </style>

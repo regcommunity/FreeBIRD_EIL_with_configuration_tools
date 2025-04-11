@@ -191,6 +191,9 @@ def create_table_data(serialized_items: Dict[str, Dict[str, str]], unique_set: D
         table_row = {"row_id":row_id}
         table_row.update(row_data)
         table_data['rows'].append(table_row)
+
+    # Sort the rows by row_id
+    table_data["rows"] = sorted(table_data["rows"], key=lambda x: x["row_id"])
     return table_data
 
 def cascade_member_mapping_changes(member_mapping_item: MEMBER_MAPPING_ITEM) -> None:
@@ -299,6 +302,30 @@ def process_mapping_chain(variable: VARIABLE, mapping_def: MAPPING_DEFINITION) -
             variable_id__code=target_var.split("(")[1].strip(")"),
             is_source="true"
         ).first())
+
+def get_source_variables():
+    source_variables = {}
+    for v in VARIABLE.objects.all():
+        if v.maintenance_agency_id:
+            if "EBA" == v.maintenance_agency_id.code:
+                domain = v.domain_id
+                domain_members = {}
+                members = MEMBER.objects.filter(domain_id=domain)
+                if len(members):
+                    for m in members:
+                        domain_members[m.member_id] = {
+                            'code': m.code,
+                            'name': m.name
+                        }
+                    source_variables[v.variable_id] = {
+                        'domain': {
+                            'id': domain.domain_id,
+                            'code': domain.code,
+                            'name': domain.name,
+                            'members': domain_members
+                        }
+                    }
+    return source_variables
 
 # Get all available variables from reference framework - FINREF_REF
 def get_reference_variables():
