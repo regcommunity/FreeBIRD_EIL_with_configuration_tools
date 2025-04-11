@@ -172,7 +172,7 @@ def process_member_mappings(member_mapping_items: List[MEMBER_MAPPING_ITEM], var
 
     return temp_items, unique_set, source_target
 
-def create_table_data(serialized_items: Dict[str, Dict[str, str]], unique_set: Dict[str, Set[str]]) -> Dict[str, Any]:
+def create_table_data(serialized_items: Dict[str, Dict[str, str]], columns_of_table: List[str]) -> Dict[str, Any]:
     """Creates table data structure from serialized items.
 
     Args:
@@ -184,13 +184,16 @@ def create_table_data(serialized_items: Dict[str, Dict[str, str]], unique_set: D
     """
     logger.debug("Creating table data")
     table_data = {
-        'headers': ["row_id"]+list(unique_set.keys()) if serialized_items else [],
+        'headers': ["row_id"]+columns_of_table,
         'rows': []
     }
     for row_id, row_data in serialized_items.items():
-        table_row = {"row_id":row_id}
+        table_row = {"row_id":int(row_id)}
         table_row.update(row_data)
         table_data['rows'].append(table_row)
+
+    # Sort the rows by row_id
+    table_data["rows"] = sorted(table_data["rows"], key=lambda x: x["row_id"])
     return table_data
 
 def cascade_member_mapping_changes(member_mapping_item: MEMBER_MAPPING_ITEM) -> None:
@@ -299,6 +302,30 @@ def process_mapping_chain(variable: VARIABLE, mapping_def: MAPPING_DEFINITION) -
             variable_id__code=target_var.split("(")[1].strip(")"),
             is_source="true"
         ).first())
+
+def get_source_variables():
+    source_variables = {}
+    for v in VARIABLE.objects.all():
+        if v.maintenance_agency_id:
+            if "EBA" == v.maintenance_agency_id.code:
+                domain = v.domain_id
+                domain_members = {}
+                members = MEMBER.objects.filter(domain_id=domain)
+                if len(members):
+                    for m in members:
+                        domain_members[m.member_id] = {
+                            'code': m.code,
+                            'name': m.name
+                        }
+                    source_variables[v.variable_id] = {
+                        'domain': {
+                            'id': domain.domain_id,
+                            'code': domain.code,
+                            'name': domain.name,
+                            'members': domain_members
+                        }
+                    }
+    return source_variables
 
 # Get all available variables from reference framework - FINREF_REF
 def get_reference_variables():
