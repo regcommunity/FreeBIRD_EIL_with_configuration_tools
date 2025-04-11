@@ -2038,11 +2038,14 @@ def return_semantic_integration_menu(request: Any, mapping_id: str = "") -> Any:
         logger.info(f"Processing selected mapping: {selected_mapping}")
         map_def = MAPPING_DEFINITION.objects.get(code=selected_mapping)
         member_mapping_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=map_def.member_mapping_id.code)
-        var_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=map_def.variable_mapping_id)
-
+        var_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=map_def.variable_mapping_id).order_by('is_source', 'variable_id__name')
         temp_items, unique_set, source_target = process_member_mappings(member_mapping_items, var_items)
-        serialized_items_2 = {row_id: row_data['items'] for row_id, row_data in temp_items.items()}
-        table_data = create_table_data(serialized_items_2, unique_set)
+        columns_of_table = sum(list(map(list,source_target.values())),[])
+        logging.debug(str(columns_of_table))
+        serialized_items_2 = {row_id: { k_:row_data['items'].get(k_)
+            for k_ in columns_of_table}
+            for row_id, row_data in temp_items.items()}
+        table_data = create_table_data(serialized_items_2, columns_of_table)
 
 
         context.update({
@@ -2226,116 +2229,53 @@ def edit_mapping_endpoint(request: Any) -> JsonResponse:
         source_data = data.get('source_data', {})
         target_data = data.get('target_data', {})
 
-        print(source_data,target_data)
-
-        # Get timestamp for new instances
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        print(source_data, target_data)
 
         # Get existing mapping if available
         if orig_mapping_id:
             with transaction.atomic():
                 orig_mapping = MAPPING_DEFINITION.objects.get(mapping_id=orig_mapping_id)
+                member_mapping = orig_mapping.member_mapping_id
 
-                # Extract base IDs without timestamp if they exist
-                member_mapping_base_id = orig_mapping.member_mapping_id.member_mapping_id.split('__')[0] if '__' in orig_mapping.member_mapping_id.member_mapping_id else orig_mapping.member_mapping_id.member_mapping_id
-                variable_mapping_base_id = orig_mapping.variable_mapping_id.variable_mapping_id.split('__')[0] if '__' in orig_mapping.variable_mapping_id.variable_mapping_id else orig_mapping.variable_mapping_id.variable_mapping_id
-                mapping_base_id = orig_mapping.mapping_id.split('__')[0] if '__' in orig_mapping.mapping_id else orig_mapping.mapping_id
+                # Find the highest existing row number to determine the next row number
+                existing_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=member_mapping)
 
-                # Copy member mapping
-                new_member_mapping = MEMBER_MAPPING.objects.create(
-                    member_mapping_id=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    code=f"{member_mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    name=f"{orig_mapping.member_mapping_id.name} ({timestamp})"
-                )
-                logger.info(f"I created new member mapping with ID: {new_member_mapping.member_mapping_id}")
+                if existing_items.exists():
+                    last_member_mapping_row = str(max(int(item.member_mapping_row) for item in existing_items) + 1)
+                else:
+                    last_member_mapping_row = "1"
 
-                # Copy variable mapping
-                new_variable_mapping = VARIABLE_MAPPING.objects.create(
-                    variable_mapping_id=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    code=f"{variable_mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    name=f"{orig_mapping.variable_mapping_id.name} ({timestamp})"
-                )
-                logger.info(f"I created new variable mapping with ID: {new_variable_mapping.variable_mapping_id}")
+                logger.info(f"Adding new row {last_member_mapping_row} to existing mapping {orig_mapping.mapping_id}")
 
-                # Copy existing variable mapping items
-                existing_variable_items = VARIABLE_MAPPING_ITEM.objects.filter(variable_mapping_id=orig_mapping.variable_mapping_id)
-                for item in existing_variable_items:
-                    new_variable_item = VARIABLE_MAPPING_ITEM.objects.create(
-                        variable_mapping_id=new_variable_mapping,
-                        variable_id=item.variable_id,
-                        is_source=item.is_source
-                    )
-                    logger.info(f"I created new variable mapping item: {new_variable_item.id}")
-
-                # Copy mapping definition
-                mapping_def = MAPPING_DEFINITION.objects.create(
-                    mapping_id=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    code=f"{mapping_base_id}".split("__")[0]+f"__{timestamp}",
-                    name=f"{orig_mapping.name} ({timestamp})",
-                    member_mapping_id=new_member_mapping,
-                    variable_mapping_id=new_variable_mapping
-                )
-                logger.info(f"I created new mapping definition with ID: {mapping_def.mapping_id}")
-
-                # Copy existing member mapping items
-                existing_items = MEMBER_MAPPING_ITEM.objects.filter(member_mapping_id=orig_mapping.member_mapping_id)
-                for item in existing_items:
-                    new_item = MEMBER_MAPPING_ITEM.objects.create(
-                        member_mapping_id=new_member_mapping,
-                        member_mapping_row=item.member_mapping_row,
-                        variable_id=item.variable_id,
-                        member_id=item.member_id,
-                        is_source=item.is_source
-                    )
-                    logger.info(f"I created new member mapping item for row {new_item.member_mapping_row}")
-
-                last_member_mapping_row = str(max(int(item.member_mapping_row) for item in existing_items)+1)
-
-                for variable_,member_ in zip(source_data["variabless"],source_data["members"]):
+                # Add new source items to the existing mapping
+                for variable_, member_ in zip(source_data["variabless"], source_data["members"]):
                     variable_id = variable_.split(" ")[-1].strip("(").rstrip(")")
                     variable_obj = VARIABLE.objects.get(code=variable_id)
                     member_obj = MEMBER.objects.get(member_id=member_)
 
-                    new_member_item = MEMBER_MAPPING_ITEM.objects.create(
-                        member_mapping_id=new_member_mapping,
+                    MEMBER_MAPPING_ITEM.objects.create(
+                        member_mapping_id=member_mapping,
                         member_mapping_row=last_member_mapping_row,
                         variable_id=variable_obj,
                         member_id=member_obj,
                         is_source=True
                     )
-                    logger.info(f"I created new member mapping item for row {last_member_mapping_row}")
+                    logger.info(f"Added source item to existing mapping for row {last_member_mapping_row}")
 
-                for variable_,member_ in zip(target_data["variablses"],target_data["members"]):
+                # Add new target items to the existing mapping
+                for variable_, member_ in zip(target_data["variablses"], target_data["members"]):
                     variable_id = variable_.split(" ")[-1].strip("(").rstrip(")")
                     variable_obj = VARIABLE.objects.get(variable_id=variable_id)
                     member_obj = MEMBER.objects.get(member_id=member_)
 
-                    new_member_item = MEMBER_MAPPING_ITEM.objects.create(
-                        member_mapping_id=new_member_mapping,
+                    MEMBER_MAPPING_ITEM.objects.create(
+                        member_mapping_id=member_mapping,
                         member_mapping_row=last_member_mapping_row,
                         variable_id=variable_obj,
                         member_id=member_obj,
                         is_source=False
                     )
-                    logger.info(f"I created new member mapping item for row {last_member_mapping_row}")
-
-
-        with transaction.atomic():
-
-            # Create mapping to cube with version suffix
-            old_mappings = MAPPING_TO_CUBE.objects.filter(mapping_id=mapping_def)
-            if old_mappings.exists():
-                latest = old_mappings.latest('cube_mapping_id')
-                version = int(latest.cube_mapping_id.split('_v')[-1]) + 1
-                new_mapping_code = f"{latest.cube_mapping_id.split('_v')[0]}_v{version}"
-            else:
-                new_mapping_code = f"{mapping_def.code}_v1"
-
-            mapping_to_cube = MAPPING_TO_CUBE.objects.create(
-                mapping_id=mapping_def,
-                cube_mapping_id=new_mapping_code
-            )
-            logger.info(f"I created new mapping to cube with ID: {mapping_to_cube.cube_mapping_id}")
+                    logger.info(f"Added target item to existing mapping for row {last_member_mapping_row}")
 
         logger.info("Mapping updated successfully")
         return JsonResponse({'status': 'success'})

@@ -75,7 +75,7 @@ class DatabaseConnector:
     @staticmethod
     def get_cube_structure_item_links(cube_link):
         """Get cube structure item links for a specific cube link"""
-        logger.info("Getting cube structure item links for cube_link_id: %s", cube_link.id)
+        logger.info("Getting cube structure item links for cube_link_id: %s", cube_link.cube_link_id)
         DjangoSetup.configure_django()
         from pybirdai.bird_meta_data_model import CUBE_STRUCTURE_ITEM_LINK
         links = CUBE_STRUCTURE_ITEM_LINK.objects.select_related(
@@ -83,13 +83,13 @@ class DatabaseConnector:
             'foreign_cube_variable_code',
             'cube_link_id'
         ).filter(cube_link_id=cube_link)
-        logger.debug("Found %d structure item links for cube_link_id: %s", len(links), cube_link.id)
+        logger.debug("Found %d structure item links for cube_link_id: %s", len(links), cube_link.cube_link_id)
         return links
 
     @classmethod
     def get_linked_cube_structure_items(cls, cube_link):
         """Get quadruples of linked cube structure items"""
-        logger.info("Building linked cube structure items for cube_link_id: %s", cube_link.id)
+        logger.info("Building linked cube structure items for cube_link_id: %s", cube_link.cube_link_id)
         DjangoSetup.configure_django()
         from pybirdai.bird_meta_data_model import CUBE_STRUCTURE_ITEM_LINK
 
@@ -380,7 +380,7 @@ def process_cube_visualization(cube_id, join_identifier=None, in_md=False):
     # Process the filtered cube links
     json_list = []
     for cube_link in cube_links:
-        logger.debug("Processing cube_link: %s", cube_link.id)
+        logger.debug("Processing cube_link: %s", cube_link.cube_link_id)
         linked_cube_structure_items = DatabaseConnector.get_linked_cube_structure_items(
             cube_link)
         json_list.append(DatabaseConnector.create_visualization_json(linked_cube_structure_items))
