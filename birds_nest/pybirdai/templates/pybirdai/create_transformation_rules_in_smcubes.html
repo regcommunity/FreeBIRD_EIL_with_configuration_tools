@@ -20,31 +20,56 @@
 <h1 style="text-align: center;">Create Transformation Rules MetaData</h1>
 
 <div class="task-grid">
-    
+
+    <a href="{% url 'pybirdai:run_create_filters' %}" class="task-item">
+        <img src="{% static 'images/filters.webp' %}" alt="Concept icon" />
+        <span>Create template based Output Layers and Filters</span>
     </a>
+    <a
+        href="{% url 'pybirdai:import_ancrdt_model' %}"
+        class="task-item"
+    >
+        <img src="{% static 'images/filters.webp' %}" alt="Concept icon" />
+        <span>Import dataset output layers</span>
+    </a>
+    <a href="{% url 'pybirdai:run_create_joins_meta_data' %}" class="task-item">
+        <img src="{% static 'images/joins.webp' %}" alt="Metadata icon" />
+        <span>Create Joins</span>
+    </a>
+    <a href="{% url 'pybirdai:run_create_filters' %}" class="task-item">
+        <img src="{% static 'images/filters.webp' %}" alt="Concept icon" />
+        <span>Create dataset filters (e.g. Anacredit)</span>
+    </a>
+    <a href="{% url 'pybirdai:review_filters' %}" class="task-item">
+        <img
+            src="{% static 'images/review_checkpoint.webp' %}"
+            alt="Review icon"
+        />
+        <span>CHECKPOINT:Review Output Layer and Filters</span>
+    </a>
+    <a href="{% url 'pybirdai:review_join_meta_data' %}" class="task-item">
+        <img
+            src="{% static 'images/review_checkpoint.webp' %}"
+            alt="Review icon"
+        />
+        <span>CHECKPOINT:Review Joins Metadata</span>
+    </a>
+    <!--
     <a href="{% url 'pybirdai:run_create_filters' %}" class="task-item">
         <img src="{% static 'images/filters.webp' %}" alt="Concept icon">
         <span>Create Output Layer and Filters</span>
     </a>
-    <a href="{% url 'pybirdai:review_filters' %}" class="task-item">
-        <img src="{% static 'images/review_checkpoint.webp' %}" alt="Review icon">
-        <span>CHECKPOINT:Review Output Layer and Filters</span>
-    </a>
     <a href="{% url 'pybirdai:run_create_joins_meta_data' %}" class="task-item">
         <img src="{% static 'images/joins.webp' %}" alt="Metadata icon">
         <span>Create Joins Metadata</span>
-    </a>
-    <a href="{% url 'pybirdai:review_join_meta_data' %}" class="task-item">
-        <img src="{% static 'images/review_checkpoint.webp' %}" alt="Review icon">
-        <span>CHECKPOINT:Review Joins Metadata</span>
-    </a>
+    </a> -->
     <a href="{% url 'pybirdai:create_transformations_metadata' %}" class="task-item">
         <img src="{% static 'images/back_arrow.jpg' %}" alt="back_arrow">
         <span>Back to Create Transformations Metadata</span>
     </a>
-    
-    
-    
-    
+
+
+
+
 </div>
 {% endblock %}

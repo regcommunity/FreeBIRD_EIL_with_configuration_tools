@@ -22,25 +22,45 @@ class ImportWebsiteToSDDModel(object):
     '''
     Class responsible for importing SDD csv files into an instance of the analysis model
     '''
-    def import_report_templates_from_sdd(self, sdd_context):
+    def import_report_templates_from_sdd(self, sdd_context, file_dir : str = "technical_export", ancrdt_include:bool = False):
         '''
         Import SDD csv files into an instance of the analysis model
         '''
-        ImportWebsiteToSDDModel.create_maintenance_agencies(self, sdd_context)
-        ImportWebsiteToSDDModel.create_frameworks(self, sdd_context)
-        ImportWebsiteToSDDModel.create_all_domains(self, sdd_context,False)
-        ImportWebsiteToSDDModel.create_all_members(self, sdd_context,False)
-        ImportWebsiteToSDDModel.create_all_variables(self, sdd_context,False)
+        self.base_path = os.sep.join([sdd_context.file_directory,file_dir])
 
-        ImportWebsiteToSDDModel.create_report_tables(self, sdd_context)
-        ImportWebsiteToSDDModel.create_table_cells(self, sdd_context)
-        ImportWebsiteToSDDModel.create_axis(self, sdd_context)
-        ImportWebsiteToSDDModel.create_axis_ordinates(self, sdd_context)
-        ImportWebsiteToSDDModel.create_ordinate_items(self, sdd_context)
-        ImportWebsiteToSDDModel.create_cell_positions(self, sdd_context)
 
-  
-        
+        if os.path.exists(self.base_path + os.sep + "maintenance_agency.csv"):
+            ImportWebsiteToSDDModel.create_maintenance_agencies(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "framework.csv"):
+            ImportWebsiteToSDDModel.create_frameworks(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "domain.csv"):
+            ImportWebsiteToSDDModel.create_all_domains(self, sdd_context,False,ancrdt_include)
+        if os.path.exists(self.base_path + os.sep + "member.csv"):
+            ImportWebsiteToSDDModel.create_all_members(self, sdd_context,False,ancrdt_include)
+        if os.path.exists(self.base_path + os.sep + "variable.csv"):
+            ImportWebsiteToSDDModel.create_all_variables(self, sdd_context,False,ancrdt_include)
+
+        if os.path.exists(self.base_path + os.sep + "table.csv"):
+            ImportWebsiteToSDDModel.create_report_tables(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "table_cell.csv"):
+            ImportWebsiteToSDDModel.create_table_cells(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "axis.csv"):
+            ImportWebsiteToSDDModel.create_axis(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "axis_ordinate.csv"):
+            ImportWebsiteToSDDModel.create_axis_ordinates(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "ordinate_item.csv"):
+            ImportWebsiteToSDDModel.create_ordinate_items(self, sdd_context)
+        if os.path.exists(self.base_path + os.sep + "cell_position.csv"):
+            ImportWebsiteToSDDModel.create_cell_positions(self, sdd_context)
+
+        if ancrdt_include:
+            if os.path.exists(self.base_path + os.sep + "subdomain.csv"):
+                ImportWebsiteToSDDModel.create_all_subdomains(self, sdd_context)
+            if os.path.exists(self.base_path + os.sep + "cube.csv"):
+                ImportWebsiteToSDDModel.create_all_structures(self, sdd_context)
+
+
+
 
     def import_semantic_integrations_from_sdd(self, sdd_context):
         '''
@@ -67,7 +87,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import maintenance agencies from CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "maintenance_agency.csv"
+        file_location = self.base_path + os.sep + "maintenance_agency.csv"
         header_skipped = False
         agencies_to_create = []
 
@@ -87,18 +107,19 @@ class ImportWebsiteToSDDModel(object):
                     maintenance_agency.code = code
                     maintenance_agency.description = description
                     maintenance_agency.maintenance_agency_id = ImportWebsiteToSDDModel.replace_dots(self, id)
-                    
+
                     agencies_to_create.append(maintenance_agency)
                     context.agency_dictionary[id] = maintenance_agency
 
+
         if context.save_sdd_to_db and agencies_to_create:
-            MAINTENANCE_AGENCY.objects.bulk_create(agencies_to_create, batch_size=1000)
+            MAINTENANCE_AGENCY.objects.bulk_create(agencies_to_create, batch_size=1000, ignore_conflicts=True)
 
     def create_frameworks(self, context):
         '''
         Import frameworks from CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "framework.csv"
+        file_location = self.base_path + os.sep + "framework.csv"
         header_skipped = False
         frameworks_to_create = []
 
@@ -118,18 +139,18 @@ class ImportWebsiteToSDDModel(object):
                     framework.code = code
                     framework.description = description
                     framework.framework_id = ImportWebsiteToSDDModel.replace_dots(self, id)
-                    
+
                     frameworks_to_create.append(framework)
                     context.framework_dictionary[ImportWebsiteToSDDModel.replace_dots(self, id)] = framework
 
         if context.save_sdd_to_db and frameworks_to_create:
-            FRAMEWORK.objects.bulk_create(frameworks_to_create, batch_size=1000)
+            FRAMEWORK.objects.bulk_create(frameworks_to_create, batch_size=1000, ignore_conflicts=True)
 
-    def create_all_domains(self, context, ref):
+    def create_all_domains(self, context, ref, ancrdt_include:bool = False):
         '''
         Import all domains from CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "domain.csv"
+        file_location = self.base_path + os.sep + "domain.csv"
         header_skipped = False
         domains_to_create = []
 
@@ -147,13 +168,13 @@ class ImportWebsiteToSDDModel(object):
                     is_enumerated = row[ColumnIndexes().domain_domain_is_enumerated]
                     is_reference = row[ColumnIndexes().domain_domain_is_reference]
                     domain_name = row[ColumnIndexes().domain_domain_name_index]
-                    
-                    include = False
+
+                    include = False or ancrdt_include
                     if (ref) and (maintenence_agency == "ECB"):
                         include = True
                     if (not ref) and not (maintenence_agency == "ECB"):
                         include = True
-                        
+
                     if include:
                         domain = DOMAIN(name=ImportWebsiteToSDDModel.replace_dots(self, domain_id))
                         if ref:
@@ -175,13 +196,13 @@ class ImportWebsiteToSDDModel(object):
                             context.domain_dictionary[domain.domain_id] = domain
 
         if context.save_sdd_to_db and domains_to_create:
-            DOMAIN.objects.bulk_create(domains_to_create, batch_size=1000)
+            DOMAIN.objects.bulk_create(domains_to_create, batch_size=1000, ignore_conflicts=True)
 
-    def create_all_members(self, context, ref):
+    def create_all_members(self, context, ref, ancrdt_include:bool=False):
         '''
         Import all members from CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "member.csv"
+        file_location = self.base_path + os.sep + "member.csv"
         header_skipped = False
         members_to_create = []
 
@@ -197,16 +218,18 @@ class ImportWebsiteToSDDModel(object):
                     member_id = row[ColumnIndexes().member_member_id_index]
                     member_name = row[ColumnIndexes().member_member_name_index]
                     maintenence_agency = row[ColumnIndexes().member_member_maintenence_agency]
-                    
+
                     if (member_name is None) or (member_name == ""):
                         member_name = member_id
-                        
-                    include = False
-                    if (ref) and (maintenence_agency == "ECB"):
+
+                    if ancrdt_include:
                         include = True
-                    if (not ref) and not (maintenence_agency == "ECB"):
-                        include = True
-                        
+                    else:
+                        if (ref) and (maintenence_agency == "ECB"):
+                            include = True
+                        if (not ref) and not (maintenence_agency == "ECB"):
+                            include = True
+
                     if include:
                         member = MEMBER(name=ImportWebsiteToSDDModel.replace_dots(self, member_id))
                         member.member_id = ImportWebsiteToSDDModel.replace_dots(self, member_id)
@@ -226,13 +249,13 @@ class ImportWebsiteToSDDModel(object):
                             context.member_id_to_member_code_map[member.member_id] = code
 
         if context.save_sdd_to_db and members_to_create:
-            MEMBER.objects.bulk_create(members_to_create, batch_size=1000)
+            MEMBER.objects.bulk_create(members_to_create, batch_size=1000, ignore_conflicts=True)
 
-    def create_all_variables(self, context, ref):
+    def create_all_variables(self, context, ref, include=False):
         '''
         Import all variables from CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "variable.csv"
+        file_location = self.base_path + os.sep + "variable.csv"
         header_skipped = False
         variables_to_create = []
 
@@ -249,13 +272,13 @@ class ImportWebsiteToSDDModel(object):
                     name = row[ColumnIndexes().variable_long_name_index]
                     variable_id = row[ColumnIndexes().variable_variable_true_id]
                     primary_concept = row[ColumnIndexes().variable_primary_concept]
-                    
-                    include = False
-                    if (ref) and (maintenence_agency == "ECB"):
-                        include = True
-                    if (not ref) and not (maintenence_agency == "ECB"):
-                        include = True
-                        
+
+                    if not include:
+                        if (ref) and (maintenence_agency == "ECB"):
+                            include = True
+                        if (not ref) and not (maintenence_agency == "ECB"):
+                            include = True
+
                     if include:
                         variable = VARIABLE(name=ImportWebsiteToSDDModel.replace_dots(self, variable_id))
                         maintenance_agency_id = ImportWebsiteToSDDModel.find_maintenance_agency_with_id(self,context,maintenence_agency)
@@ -275,7 +298,7 @@ class ImportWebsiteToSDDModel(object):
                             context.variable_to_primary_concept_map[variable.variable_id] = primary_concept
 
         if context.save_sdd_to_db and variables_to_create:
-            VARIABLE.objects.bulk_create(variables_to_create, batch_size=1000)
+            VARIABLE.objects.bulk_create(variables_to_create, batch_size=1000, ignore_conflicts=True)
 
     def create_all_parent_members_with_children_locally(self, context):
         print("Creating all parent members with children locally")
@@ -283,33 +306,33 @@ class ImportWebsiteToSDDModel(object):
         parent_members_to_create = []
         parent_members_child_triples = []
         missing_children = []
-        
+
         # Pre-fetch all hierarchies for faster lookup
         hierarchy_cache = {}
-        
+
         with open(f"{context.file_directory}/technical_export/member_hierarchy_node.csv", encoding='utf-8') as csvfile:
             next(csvfile)  # Skip header more efficiently
             for row in csv.reader(csvfile):
                 parent_member_id = row[ColumnIndexes().member_hierarchy_node_parent_member_id]
                 member_id = row[ColumnIndexes().member_hierarchy_node_member_id]
                 hierarchy_id = row[ColumnIndexes().member_hierarchy_node_hierarchy_id]
-                
+
                 if not parent_member_id:
                     continue
-                    
+
                 if hierarchy_id not in hierarchy_cache:
                     hierarchy_cache[hierarchy_id] = ImportWebsiteToSDDModel.find_member_hierarchy_with_id(self,hierarchy_id,context)
-                
+
                 hierarchy = hierarchy_cache[hierarchy_id]
                 if hierarchy:
                     domain = hierarchy.domain_id
                     parent_members_child_triples.append((parent_member_id,member_id,domain))
                     parent_members.add(parent_member_id)
-                
+
         # Process parent-child relationships in batches
         for parent_member_id, member_id, domain in parent_members_child_triples:
             if member_id in parent_members:
-                if not any(parent_member_id in d for d in (context.members_that_are_nodes, 
+                if not any(parent_member_id in d for d in (context.members_that_are_nodes,
                                                          context.member_dictionary,
                                                          context.member_dictionary)):
                     parent_member = MEMBER(
@@ -340,14 +363,14 @@ class ImportWebsiteToSDDModel(object):
                     )
                     parent_members_to_create.append(parent_member)
                     context.members_that_are_nodes[parent_member_id] = parent_member
-                    
+
                     context.member_dictionary[parent_member.member_id] = parent_member
                     if not (parent_member.domain_id is None) and not (parent_member.domain_id == ""):
                         context.member_id_to_domain_map[parent_member] = domain
                         context.member_id_to_member_code_map[parent_member.member_id] = parent_member.member_id
 
         if context.save_sdd_to_db and parent_members_to_create:
-            MEMBER.objects.bulk_create(parent_members_to_create, batch_size=5000)  # Increased batch size
+            MEMBER.objects.bulk_create(parent_members_to_create, batch_size=5000,ignore_conflicts=True)  # Increased batch size
 
         ImportWebsiteToSDDModel.save_missing_children_to_csv(context,missing_children)
 
@@ -357,7 +380,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         missing_domains = set()  # Using set for faster lookups
         hierarchies_to_create = []
-        
+
         with open(f"{context.file_directory}/technical_export/member_hierarchy.csv", encoding='utf-8') as csvfile:
             next(csvfile)  # Skip header more efficiently
             for row in csv.reader(csvfile):
@@ -369,7 +392,7 @@ class ImportWebsiteToSDDModel(object):
 
                 maintenance_agency = ImportWebsiteToSDDModel.find_maintenance_agency_with_id(self,context,maintenance_agency_id)
                 domain = ImportWebsiteToSDDModel.find_domain_with_id(self,context,domain_id)
-                
+
                 if domain is None:
                     missing_domains.add(domain_id)
                     continue
@@ -382,7 +405,7 @@ class ImportWebsiteToSDDModel(object):
                     maintenance_agency_id=maintenance_agency,
                     domain_id=domain
                 )
-                
+
                 if hierarchy.member_hierarchy_id not in context.member_hierarchy_dictionary:
                     hierarchies_to_create.append(hierarchy)
                     context.member_hierarchy_dictionary[hierarchy.member_hierarchy_id] = hierarchy
@@ -417,14 +440,14 @@ class ImportWebsiteToSDDModel(object):
             writer = csv.writer(csvfile)
             writer.writerows(missing_children)
 
-    
-        
+
+
 
     def create_all_member_hierarchies_nodes(self, context):
         '''
         Import all member hierarchy nodes from CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "member_hierarchy_node.csv"
+        file_location = self.base_path + os.sep + "member_hierarchy_node.csv"
         header_skipped = False
         missing_members = []
         missing_hierarchies = []
@@ -488,7 +511,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all tables from the rendering package CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "table.csv"
+        file_location = self.base_path + os.sep + "table.csv"
         header_skipped = False
         tables_to_create = []
 
@@ -527,7 +550,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all axes from the rendering package CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "axis.csv"
+        file_location = self.base_path + os.sep + "axis.csv"
         header_skipped = False
         axes_to_create = []
 
@@ -562,7 +585,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all axis ordinates from the rendering package CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "axis_ordinate.csv"
+        file_location = self.base_path + os.sep + "axis_ordinate.csv"
         header_skipped = False
         ordinates_to_create = []
 
@@ -601,7 +624,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all ordinate items from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "ordinate_item.csv"
+        file_location = self.base_path + os.sep + "ordinate_item.csv"
         header_skipped = False
         ordinate_items_to_create = []
 
@@ -646,7 +669,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all table cells from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "table_cell.csv"
+        file_location = self.base_path + os.sep + "table_cell.csv"
         header_skipped = False
         table_cells_to_create = []
 
@@ -681,7 +704,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all cell positions from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "cell_position.csv"
+        file_location = self.base_path + os.sep + "cell_position.csv"
         header_skipped = False
         cell_positions_to_create = []
 
@@ -713,7 +736,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all member mappings from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "member_mapping.csv"
+        file_location = self.base_path + os.sep + "member_mapping.csv"
         header_skipped = False
         member_mappings_to_create = []
 
@@ -745,8 +768,8 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all member mapping items from the rendering package CSV file using bulk create
         '''
-        
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "member_mapping_item.csv"
+
+        file_location = self.base_path + os.sep + "member_mapping_item.csv"
         header_skipped = False
         missing_members = []
         missing_variables = []
@@ -767,14 +790,14 @@ class ImportWebsiteToSDDModel(object):
                                                             self,member_id,context)
                         variable = ImportWebsiteToSDDModel.find_variable_with_id(
                                                             self,context,variable_id)
-                        
+
                         if member is None:
                             if member_id not in missing_members:
                                 missing_members.append((member_id,member_mapping_id,row_number,variable_id))
                         if variable is None:
                             if variable_id not in missing_variables:
                                 missing_variables.append((variable_id,'',''))
-                                
+
 
                         if member is None or variable is None:
                             pass
@@ -787,7 +810,7 @@ class ImportWebsiteToSDDModel(object):
                             member_mapping_item.member_mapping_id  = ImportWebsiteToSDDModel.find_member_mapping_with_id(
                                                 self,context,member_mapping_id)
 
-                            if context.save_sdd_to_db:  
+                            if context.save_sdd_to_db:
                                 member_mapping_items_to_create.append(member_mapping_item)
                             try:
                                 member_mapping_items_list = context.member_mapping_items_dictionary[member_mapping_id]
@@ -811,7 +834,7 @@ class ImportWebsiteToSDDModel(object):
             for var in missing_variables:
                 writer.writerow([var[0],var[1],var[2]])
 
-    def save_missing_mapping_members_to_csv(context,missing_members):   
+    def save_missing_mapping_members_to_csv(context,missing_members):
         filename = context.output_directory + os.sep + "generated_mapping_warnings" + os.sep + "mappings_missing_members.csv"
         with open(filename, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
@@ -852,31 +875,31 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all mapping definitions from the rendering package CSV file using bulk create
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "mapping_definition.csv"
+        file_location = self.base_path + os.sep + "mapping_definition.csv"
         mapping_definitions_to_create = []
-        
+
         # Cache lookups
         member_mapping_cache = {}
         variable_mapping_cache = {}
-        
+
         with open(file_location, encoding='utf-8') as csvfile:
             rows = list(csv.reader(csvfile))[1:]  # Skip header
-            
+
             for row in rows:
                 mapping_id = row[ColumnIndexes().mapping_definition_mapping_id]
                 if mapping_id.startswith("SHS_"):
                     continue
-                    
+
                 member_mapping_id = row[ColumnIndexes().mapping_definition_member_mapping_id]
                 if member_mapping_id not in member_mapping_cache:
                     member_mapping_cache[member_mapping_id] = ImportWebsiteToSDDModel.find_member_mapping_with_id(
                         self, context, member_mapping_id)
-                    
+
                 variable_mapping_id = row[ColumnIndexes().mapping_definition_variable_mapping_id]
                 if variable_mapping_id not in variable_mapping_cache:
                     variable_mapping_cache[variable_mapping_id] = ImportWebsiteToSDDModel.find_variable_mapping_with_id(
                         self, context, variable_mapping_id)
-                    
+
                 mapping_definition = MAPPING_DEFINITION(
                     mapping_id=mapping_id,
                     name=row[ColumnIndexes().mapping_definition_name],
@@ -896,7 +919,7 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all mapping to cubes from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "mapping_to_cube.csv"
+        file_location = self.base_path + os.sep + "mapping_to_cube.csv"
         header_skipped = False
         mapping_to_cubes_to_create = []
 
@@ -910,7 +933,7 @@ class ImportWebsiteToSDDModel(object):
                     mapping_to_cube_cube_mapping_id = row[ColumnIndexes().mapping_to_cube_cube_mapping_id]
                     mapping_to_cube_valid_from = row[ColumnIndexes().mapping_to_cube_valid_from]
                     mapping_to_cube_valid_to = row[ColumnIndexes().mapping_to_cube_valid_to]
-                    
+
                     if not mapping_to_cube_mapping_id.startswith("M_SHS"):
                         mapping_to_cube = MAPPING_TO_CUBE(
                             mapping_id=ImportWebsiteToSDDModel.find_mapping_definition_with_id(self, context, mapping_to_cube_mapping_id),
@@ -920,7 +943,7 @@ class ImportWebsiteToSDDModel(object):
                         )
 
                         mapping_to_cubes_to_create.append(mapping_to_cube)
-                        
+
                         mapping_to_cube_list = context.mapping_to_cube_dictionary.setdefault(
                             mapping_to_cube.cube_mapping_id, [])
                         mapping_to_cube_list.append(mapping_to_cube)
@@ -932,19 +955,19 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all variable mappings from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "variable_mapping.csv"
-        
+        file_location = self.base_path + os.sep + "variable_mapping.csv"
+
         # Pre-filter SHS_ entries and build batch
         variable_mappings_to_create = []
-        
+
         # Read entire CSV at once instead of line by line
         with open(file_location, encoding='utf-8') as csvfile:
             rows = list(csv.reader(csvfile))[1:]  # Skip header
-            
+
             # Process in a single pass
             for row in rows:
                 variable_mapping_id = row[ColumnIndexes().variable_mapping_variable_mapping_id]
-                
+
                 if not variable_mapping_id.startswith("SHS_") and variable_mapping_id not in context.variable_mapping_dictionary:
                     variable_mapping = VARIABLE_MAPPING(
                         variable_mapping_id=variable_mapping_id,
@@ -953,7 +976,7 @@ class ImportWebsiteToSDDModel(object):
                         code=row[ColumnIndexes().variable_mapping_code],
                         name=row[ColumnIndexes().variable_mapping_name]
                     )
-                    
+
                     variable_mappings_to_create.append(variable_mapping)
                     context.variable_mapping_dictionary[variable_mapping_id] = variable_mapping
 
@@ -965,30 +988,30 @@ class ImportWebsiteToSDDModel(object):
         '''
         Import all variable mapping items from the rendering package CSV file
         '''
-        file_location = context.file_directory + os.sep + "technical_export" + os.sep + "variable_mapping_item.csv"
+        file_location = self.base_path + os.sep + "variable_mapping_item.csv"
         missing_variables = []
         variable_mapping_items_to_create = []
-        
+
         # Cache variable lookups
         variable_cache = {}
-        
+
         with open(file_location, encoding='utf-8') as csvfile:
             rows = list(csv.reader(csvfile))[1:]  # Skip header
-            
+
             for row in rows:
                 mapping_id = row[ColumnIndexes().varaible_mapping_item_variable_mapping_id]
                 if mapping_id.startswith("SHS_"):
                     continue
-                    
+
                 variable_id = row[ColumnIndexes().variable_mapping_item_variable_id]
-                
+
                 # Use cached variable lookup
                 if variable_id not in variable_cache:
                     variable_cache[variable_id] = ImportWebsiteToSDDModel.find_variable_with_id(
                         self, context, variable_id)
-                
+
                 variable = variable_cache[variable_id]
-                
+
                 if variable is None:
                     missing_variables.append((
                         variable_id,
@@ -996,7 +1019,7 @@ class ImportWebsiteToSDDModel(object):
                         row[ColumnIndexes().variable_mapping_item_valid_to]
                     ))
                     continue
-                    
+
                 variable_mapping_item = VARIABLE_MAPPING_ITEM(
                     variable_id=variable,
                     variable_mapping_id=ImportWebsiteToSDDModel.find_variable_mapping_with_id(
@@ -1007,7 +1030,7 @@ class ImportWebsiteToSDDModel(object):
                 )
 
                 variable_mapping_items_to_create.append(variable_mapping_item)
-                
+
                 # Build dictionary in a single operation
                 context.variable_mapping_item_dictionary.setdefault(mapping_id, []).append(variable_mapping_item)
 
@@ -1035,12 +1058,9 @@ class ImportWebsiteToSDDModel(object):
             return context.member_dictionary[element_id]
         except:
             try:
-                return context.member_dictionary[element_id]
-            except KeyError:
-                try:
-                    return context.members_that_are_nodes[element_id]
-                except KeyError:
-                    return None
+                return MEMBER.objects.get(member_id=element_id)
+            except:
+                return None
 
     def find_member_hierarchy_with_id(self,element_id,context):
         '''
@@ -1058,11 +1078,12 @@ class ImportWebsiteToSDDModel(object):
         try:
             return context.variable_dictionary[element_id]
         except KeyError:
+            # If not in context dictionary, try database
             try:
-                return context.variable_dictionary[element_id]
-            except KeyError:
+                return VARIABLE.objects.get(variable_id=element_id)
+            except VARIABLE.DoesNotExist:
                 return None
-            
+
     def find_maintenance_agency_with_id(self,context, element_id):
         '''
         Find an existing maintenance agency with this id
@@ -1079,12 +1100,8 @@ class ImportWebsiteToSDDModel(object):
         try:
             return context.domain_dictionary[element_id]
         except KeyError:
-            try:
-                return_item = context.domain_dictionary[element_id]
-                return return_item
-            except KeyError:
-                return None
-            
+            return DOMAIN.objects.get(domain_id = element_id)
+
     def find_table_with_id(self, context, table_id):
         '''
         Get the report table with the given id
@@ -1126,7 +1143,7 @@ class ImportWebsiteToSDDModel(object):
         Replace dots with underscores in the given text
         '''
         return text.replace('.', '_')
-    
+
     def find_variable_mapping_with_id(self, context, variable_mapping_id):
         '''
         Get the variable mapping with the given id
@@ -1135,7 +1152,7 @@ class ImportWebsiteToSDDModel(object):
             return context.variable_mapping_dictionary[variable_mapping_id]
         except KeyError:
             return None
-        
+
     def find_mapping_definition_with_id(self, context, mapping_definition_id):
         '''
         get the mapping definition with the given id
@@ -1160,3 +1177,186 @@ class ImportWebsiteToSDDModel(object):
         for file in os.listdir(mapping_warnings_dir):
             os.remove(os.path.join(mapping_warnings_dir, file))
 
+    # Do not know if would be useful apart from importing anacredit
+    def create_all_structures(self, context):
+        '''
+        Import all cube structures from CSV file using bulk create
+        '''
+        # Import cubes
+
+        # Import cube structures
+        file_location = self.base_path + os.sep + "cube_structure.csv"
+        header_skipped = False
+        structures_to_create = []
+
+        with open(file_location, encoding='utf-8') as csvfile:
+            filereader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in filereader:
+                if not header_skipped:
+                    header_skipped = True
+                else:
+                    structure_id = row[ColumnIndexes().cube_structure_id_index]
+                    maintenence_agency = row[ColumnIndexes().cube_structure_maintenance_agency]
+                    name = row[ColumnIndexes().cube_structure_name_index]
+                    description = row[ColumnIndexes().cube_structure_description_index]
+
+                    if not CUBE_STRUCTURE.objects.filter(cube_structure_id=ImportWebsiteToSDDModel.replace_dots(self, structure_id)).exists():
+                        structure = CUBE_STRUCTURE(name=ImportWebsiteToSDDModel.replace_dots(self, structure_id))
+                        maintenance_agency_id = ImportWebsiteToSDDModel.find_maintenance_agency_with_id(self,context,maintenence_agency)
+                        structure.cube_structure_id = ImportWebsiteToSDDModel.replace_dots(self, structure_id)
+                        structure.name = name
+                        structure.description = description
+                        structure.maintenance_agency_id = maintenance_agency_id
+
+                        structures_to_create.append(structure)
+                        context.cube_structure_dictionary[structure.cube_structure_id] = structure
+
+        if context.save_sdd_to_db and structures_to_create:
+            CUBE_STRUCTURE.objects.bulk_create(structures_to_create, batch_size=1000, ignore_conflicts=True)
+
+        # Import cube structure items
+        file_location = self.base_path + os.sep + "cube_structure_item.csv"
+        header_skipped = False
+        items_to_create = []
+        csi_creation_failed = set()
+
+        with open(file_location, encoding='utf-8') as csvfile:
+            filereader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in filereader:
+                if not header_skipped:
+                    header_skipped = True
+                else:
+                    structure_id = row[ColumnIndexes().sdd_cube_structure_item_cube_structure_id]
+                    dimension_id = row[ColumnIndexes().sdd_cube_structure_item_variable_id]
+                    member_id = row[ColumnIndexes().sdd_cube_structure_item_member_id]
+                    role = row[ColumnIndexes().sdd_cube_structure_item_role]
+                    order = row[ColumnIndexes().sdd_cube_structure_item_order]
+                    subdomain_id = row[ColumnIndexes().sdd_cube_structure_item_subdomain_id]
+                    cube_variable_code = row[ColumnIndexes().sdd_cube_structure_item_cube_variable_code]
+
+                    if not CUBE_STRUCTURE_ITEM.objects.filter(
+                            cube_structure_id=context.cube_structure_dictionary.get(structure_id,CUBE_STRUCTURE.objects.get(cube_structure_id=structure_id)),
+                            variable_id=ImportWebsiteToSDDModel.find_variable_with_id(self,context,dimension_id),
+                            member_id=ImportWebsiteToSDDModel.find_member_with_id(self,member_id,context)
+                        ).exists():
+                        item = CUBE_STRUCTURE_ITEM()
+                        item.cube_structure_id = context.cube_structure_dictionary.get(structure_id,CUBE_STRUCTURE.objects.get(cube_structure_id=structure_id))
+                        item.variable_id = ImportWebsiteToSDDModel.find_variable_with_id(self,context,dimension_id)
+                        item.member_id = ImportWebsiteToSDDModel.find_member_with_id(self,member_id,context)
+                        item.role = role
+                        item.order = order
+                        item.cube_variable_code = cube_variable_code
+                        if subdomain_id:
+                            item.subdomain_id = context.subdomain_dictionary.get(structure_id,SUBDOMAIN.objects.get(subdomain_id=subdomain_id))
+
+                        if not item.variable_id: csi_creation_failed.add(dimension_id)
+                        if item.variable_id:
+                            items_to_create.append(item)
+
+        print(csi_creation_failed)
+        if context.save_sdd_to_db and items_to_create:
+            CUBE_STRUCTURE_ITEM.objects.bulk_create(items_to_create, batch_size=1000, ignore_conflicts=True)
+
+        # Import cubes
+        file_location = self.base_path + os.sep + "cube.csv"
+        header_skipped = False
+        cubes_to_create = []
+
+        with open(file_location, encoding='utf-8') as csvfile:
+            filereader = csv.reader(csvfile, delimiter=',', quotechar='"')
+            for row in filereader:
+                if not header_skipped:
+                    header_skipped = True
+                else:
+                    cube_id = row[ColumnIndexes().cube_object_id_index]
+                    maintenence_agency = row[ColumnIndexes().cube_cube_type_index]
+                    code = row[ColumnIndexes().cube_class_code_index]
+                    name = row[ColumnIndexes().cube_class_name_index]
+                    description = row[ColumnIndexes().cube_cube_structure_id_index]
+                    cube_structure_id = row[ColumnIndexes().cube_cube_structure_id_index]
+
+                    if not CUBE.objects.filter(cube_id=ImportWebsiteToSDDModel.replace_dots(self, cube_id)).exists():
+                        cube = CUBE(name=ImportWebsiteToSDDModel.replace_dots(self, cube_id))
+                        maintenance_agency_id = ImportWebsiteToSDDModel.find_maintenance_agency_with_id(self,context,maintenence_agency)
+                        cube.code = code
+                        cube.cube_id = ImportWebsiteToSDDModel.replace_dots(self, cube_id)
+                        cube.name = name
+                        cube.description = description
+                        cube.maintenance_agency_id = maintenance_agency_id
+                        cube.cube_structure_id = context.cube_structure_dictionary.get(
+                            cube_structure_id, CUBE_STRUCTURE.objects.get(cube_structure_id = cube_structure_id)
+                        )
+
+                        cubes_to_create.append(cube)
+                        context.cube_dictionary[cube.cube_id] = cube
+
+        if context.save_sdd_to_db and cubes_to_create:
+            CUBE.objects.bulk_create(cubes_to_create, batch_size=1000, ignore_conflicts=True)
+
+    def create_all_subdomains(self,sdd_context):
+        '''
+        Import all subdomains and subdomain enumerations from CSV files
+        '''
+        # Import subdomains
+        file_location = self.base_path + os.sep + "subdomain.csv"
+        subdomains_to_create = []
+
+        with open(file_location, encoding='utf-8') as csvfile:
+            rows = list(csv.reader(csvfile))[1:]  # Skip header
+
+            for row in rows:
+                subdomain_id = row[ColumnIndexes().sdd_subdomain_subdomain_id]
+                domain_id = row[ColumnIndexes().sdd_subdomain_domain_id_id]
+                maintenance_agency = row[ColumnIndexes().sdd_subdomain_code]
+                name = row[ColumnIndexes().sdd_subdomain_name]
+
+                if not SUBDOMAIN.objects.filter(subdomain_id=subdomain_id).exists():
+                    subdomain = SUBDOMAIN(
+                        subdomain_id=subdomain_id,
+                        name=name,
+                        domain_id=ImportWebsiteToSDDModel.find_domain_with_id(self,sdd_context,domain_id),
+                        maintenance_agency_id=ImportWebsiteToSDDModel.find_maintenance_agency_with_id(self,sdd_context,maintenance_agency)
+                    )
+
+                    subdomains_to_create.append(subdomain)
+                    sdd_context.subdomain_dictionary[subdomain_id] = subdomain
+
+        if sdd_context.save_sdd_to_db and subdomains_to_create:
+            SUBDOMAIN.objects.bulk_create(subdomains_to_create, batch_size=5000, ignore_conflicts=True)
+
+        # Import subdomain enumerations
+        file_location = self.base_path + os.sep + "subdomain_enumeration.csv"
+        enumerations_to_create = []
+
+        with open(file_location, encoding='utf-8') as csvfile:
+            rows = list(csv.reader(csvfile))[1:]  # Skip header
+
+            for row in rows:
+                subdomain_id = row[ColumnIndexes().sdd_subdomain_enumeration_subdomain_id_id]
+                member_id = row[ColumnIndexes().sdd_subdomain_enumeration_member_id_id]
+                order = row[ColumnIndexes().sdd_subdomain_enumeration_order]
+                valid_from = row[ColumnIndexes().sdd_subdomain_enumeration_valid_from]
+                valid_to = row[ColumnIndexes().sdd_subdomain_enumeration_valid_to]
+
+                member = ImportWebsiteToSDDModel.find_member_with_id(self,member_id,sdd_context)
+
+                if member and not SUBDOMAIN_ENUMERATION.objects.filter(
+                        subdomain_id=sdd_context.subdomain_dictionary.get(subdomain_id,SUBDOMAIN.objects.get(subdomain_id=subdomain_id)),
+                        member_id=member
+                    ).exists():
+                    enumeration = SUBDOMAIN_ENUMERATION(
+                        subdomain_id=sdd_context.subdomain_dictionary.get(subdomain_id,SUBDOMAIN.objects.get(subdomain_id=subdomain_id)),
+                        member_id=member,
+                        order=order,
+                        valid_from=valid_from,
+                        valid_to=valid_to
+                    )
+
+                    enumerations_to_create.append(enumeration)
+
+                    if subdomain_id not in sdd_context.subdomain_enumeration_dictionary:
+                        sdd_context.subdomain_enumeration_dictionary[subdomain_id] = []
+                    sdd_context.subdomain_enumeration_dictionary[subdomain_id].append(enumeration)
+
+        if sdd_context.save_sdd_to_db and enumerations_to_create:
+            SUBDOMAIN_ENUMERATION.objects.bulk_create(enumerations_to_create, batch_size=5000, ignore_conflicts=True)

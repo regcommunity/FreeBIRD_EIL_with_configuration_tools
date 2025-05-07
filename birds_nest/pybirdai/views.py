@@ -22,7 +22,7 @@ from .bird_meta_data_model import (
     VARIABLE_MAPPING, VARIABLE_MAPPING_ITEM, MEMBER_MAPPING, MEMBER_MAPPING_ITEM,
     CUBE_LINK, CUBE_STRUCTURE_ITEM_LINK, MAPPING_TO_CUBE, MAPPING_DEFINITION,
     COMBINATION, COMBINATION_ITEM, CUBE, CUBE_STRUCTURE_ITEM, VARIABLE, MEMBER,
-    MAINTENANCE_AGENCY,  MEMBER_HIERARCHY, DOMAIN
+    MAINTENANCE_AGENCY,  MEMBER_HIERARCHY, DOMAIN, MEMBER_LINK
 )
 import json
 from . import bird_meta_data_model
@@ -2658,3 +2658,356 @@ def update_mapping_row(request):
     except Exception as e:
         logger.error(f"Error updating mapping row: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
+
+def edit_member_links_page(request):
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    # Get all cube structure item links
+    cube_structure_item_links = CUBE_STRUCTURE_ITEM_LINK.objects.all().order_by('cube_structure_item_link_id')
+
+
+
+    # Prepare for filtering
+    selected_link_id = request.GET.get('csi_link_id', '')
+
+    # Prepare domain members data
+    domain_members_domain = {}
+    foreign_members_domain = []
+    primary_members_domain = []
+    member_links = []
+    link = None
+    if selected_link_id:
+        # Todo()! fix the table view
+        link = CUBE_STRUCTURE_ITEM_LINK.objects.get(cube_structure_item_link_id=selected_link_id)
+        foreign_variable_id = link.foreign_cube_variable_code.variable_id.variable_id
+
+        if link.foreign_cube_variable_code.member_id:
+            foreign_members_domain = [link.foreign_cube_variable_code.member]
+        elif link.foreign_cube_variable_code.variable_id:
+            foreign_members_domain = MEMBER.objects.all().filter(
+                subdomain_enumeration__subdomain_id = link.foreign_cube_variable_code.subdomain_id
+            )
+            # primary_members_domain = MEMBER.objects.filter(domain_id=link.foreign_cube_variable_code.variable_id.domain_id)
+            if not foreign_members_domain:
+                logging.info(f"No members found for foreign domain {foreign_variable_id}")
+        else:
+            logging.info(f"Skipping link {link.cube_structure_item_link_id} as it has no member or subdomain ID for foreign variable")
+
+        primary_variable_id = link.primary_cube_variable_code.variable_id.variable_id
+        if link.primary_cube_variable_code.member_id:
+            primary_members_domain = [link.primary_cube_variable_code.member_id]
+        elif link.primary_cube_variable_code.variable_id:
+            primary_members_domain = MEMBER.objects.all().filter(
+                subdomain_enumeration__subdomain_id = link.primary_cube_variable_code.subdomain_id
+            )
+            # primary_members_domain = MEMBER.objects.filter(domain_id=link.primary_cube_variable_code.variable_id.domain_id)
+            if not primary_members_domain:
+                logging.info(f"No members found for primary domain {primary_variable_id}")
+        else:
+            logging.info(f"Skipping link {link.cube_structure_item_link_id} as it has no member or subdomain ID for primary variable")
+
+        # Get existing member links
+        member_links = MEMBER_LINK.objects.filter(cube_structure_item_link_id=link).select_related(
+            'cube_structure_item_link_id',
+            'primary_member_id',
+            'foreign_member_id'
+        ).order_by('cube_structure_item_link_id')
+
+        logging.info(f"Processed link {link.cube_structure_item_link_id} successfully")
+
+    context = {
+        'cube_structure_item_links': [el.cube_structure_item_link_id for el in cube_structure_item_links],
+        "foreign_variable": link.foreign_cube_variable_code if link else None,
+        "primary_variable": link.primary_cube_variable_code if link else None,
+        'member_links': member_links,
+        'selected_link_id': selected_link_id,
+        "foreign_members":foreign_members_domain,
+        "primary_members":primary_members_domain,
+        'domain_members_domain': domain_members_domain
+    }
+
+    return render(request, 'pybirdai/edit_member_links.html', context)
+
+def add_member_link(request):
+    """View function for adding a member link."""
+    logger.info("Handling add member link request")
+    if request.method != 'POST':
+        logger.warning("Invalid request method for add_member_link")
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        logger.debug(f"Received data for new member link: {data}")
+        csi_link_id = data.get('csi_link_id')
+        primary_member_id = data.get('primary_member_id')
+        foreign_member_id = data.get('foreign_member_id')
+        valid_from = data.get('valid_from')
+        valid_to = data.get('valid_to')
+        is_linked = data.get('is_linked')
+
+        logger.debug(f"Looking up CSI link: {csi_link_id}")
+        csi_link = CUBE_STRUCTURE_ITEM_LINK.objects.get(cube_structure_item_link_id=csi_link_id)
+        logger.debug(f"Looking up primary member: {primary_member_id}")
+        primary_member = MEMBER.objects.get(member_id=primary_member_id)
+        logger.debug(f"Looking up foreign member: {foreign_member_id}")
+        foreign_member = MEMBER.objects.get(member_id=foreign_member_id)
+
+        member_link = MEMBER_LINK.objects.create(
+            cube_structure_item_link_id=csi_link,
+            primary_member_id=primary_member,
+            foreign_member_id=foreign_member,
+            valid_from=valid_from if valid_from else None,
+            valid_to=valid_to if valid_to else None,
+            is_linked=is_linked if is_linked else False
+        )
+        logger.info(f"Successfully created member link with ID: {member_link.id}")
+
+        return JsonResponse({'success': True, 'member_link_id': member_link.id})
+
+    except Exception as e:
+        logger.error(f"Error creating member link: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def delete_member_link(request):
+    """View function for deleting a member link."""
+    logger.info("Handling delete member link request")
+    if request.method != 'POST':
+        logger.warning("Invalid request method for delete_member_link")
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        member_link_id = data.get('member_link_id')
+        logger.debug(f"Attempting to delete member link with ID: {member_link_id}")
+
+        member_link = MEMBER_LINK.objects.get(id=member_link_id)
+        member_link.delete()
+        logger.info(f"Successfully deleted member link with ID: {member_link_id}")
+
+        return JsonResponse({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error deleting member link: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def edit_member_link(request):
+    """View function for editing a member link."""
+    logger.info("Handling edit member link request")
+    if request.method != 'POST':
+        logger.warning("Invalid request method for edit_member_link")
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        data = json.loads(request.body)
+        logger.debug(f"Received data for member link edit: {data}")
+        member_link_id = data.get('member_link_id')
+        primary_member_id = data.get('primary_member_id')
+        foreign_member_id = data.get('foreign_member_id')
+
+        logger.debug(f"Looking up member link with ID: {member_link_id}")
+        member_link = MEMBER_LINK.objects.get(id=member_link_id)
+
+        if primary_member_id:
+            logger.debug(f"Updating primary member to: {primary_member_id}")
+            primary_member = MEMBER.objects.get(member_id=primary_member_id)
+            member_link.primary_member_id = primary_member
+
+        if foreign_member_id:
+            logger.debug(f"Updating foreign member to: {foreign_member_id}")
+            foreign_member = MEMBER.objects.get(member_id=foreign_member_id)
+            member_link.foreign_member_id = foreign_member
+
+        member_link.save()
+        logger.info(f"Successfully updated member link with ID: {member_link_id}")
+
+        return JsonResponse({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error editing member link: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+def download_member_link_template(request):
+    """View function for downloading member link template."""
+    logger.info("Handling download member link template request")
+    if request.method != 'GET':
+        logger.warning("Invalid request method for download_member_link_template")
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        csi_link_id = request.GET.get('csi_link_id')
+        logger.debug(f"Downloading template for CSI link: {csi_link_id}")
+
+        # Create CSV content with header row
+        headers = ['Primary Member ID', 'Foreign Member ID', 'Valid From', 'Valid To', 'Is Linked']
+        csv_content = [','.join(headers)]
+
+        # Create response with CSV file
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename=member_links_template.csv'
+        response.write('\n'.join(csv_content))
+
+        logger.info("Successfully generated member link template")
+        return response
+
+    except Exception as e:
+        logger.error(f"Error generating template: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def upload_member_link_template(request):
+    """View function for uploading filled member link template."""
+    logger.info("Handling upload member link template request")
+    if request.method != 'POST':
+        logger.warning("Invalid request method for upload_member_link_template")
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    try:
+        uploaded_file = request.FILES.get('file')
+        csi_link_id = request.POST.get('csi_link_id')
+        logger.debug(f"Processing template upload for CSI link: {csi_link_id}")
+
+        if not uploaded_file:
+            logger.warning("No file uploaded")
+            return JsonResponse({'success': False, 'error': 'No file uploaded'})
+
+        if not uploaded_file.name.endswith('.csv'):
+            logger.warning("Invalid file format")
+            return JsonResponse({'success': False, 'error': 'Invalid file format - must be .csv'})
+
+        # Read CSV file
+        decoded_file = uploaded_file.read().decode('utf-8').splitlines()
+        csv_reader = csv.DictReader(decoded_file)
+
+        # Process each row
+        for row in csv_reader:
+            if not any(row.values()):  # Skip empty rows
+                continue
+
+            member_link_data = {
+                'csi_link_id': csi_link_id,
+                'primary_member_id': row['Primary Member ID'],
+                'foreign_member_id': row['Foreign Member ID'],
+                'valid_from': row['Valid From'],
+                'valid_to': row['Valid To'],
+                'is_linked': row['Is Linked']
+            }
+
+            try:
+                # Add member link
+                csi_link = CUBE_STRUCTURE_ITEM_LINK.objects.get(cube_structure_item_link_id=csi_link_id)
+                primary_member = MEMBER.objects.get(member_id=member_link_data['primary_member_id'])
+                foreign_member = MEMBER.objects.get(member_id=member_link_data['foreign_member_id'])
+
+                # Check if member link already exists
+                existing_link = MEMBER_LINK.objects.filter(
+                    cube_structure_item_link_id=csi_link,
+                    primary_member_id=primary_member,
+                    foreign_member_id=foreign_member
+                ).exists()
+
+                if not existing_link:
+                    MEMBER_LINK.objects.create(
+                        cube_structure_item_link_id=csi_link,
+                        primary_member_id=primary_member,
+                        foreign_member_id=foreign_member,
+                        valid_from=datetime.strptime(member_link_data['valid_from'], '%d/%m/%y').strftime('%Y-%m-%d') if member_link_data['valid_from'] else None,
+                        valid_to=datetime.strptime(member_link_data['valid_to'], '%d/%m/%y').strftime('%Y-%m-%d') if member_link_data['valid_to'] else None,
+                        is_linked=True if (member_link_data['is_linked'] == "TRUE") else False
+                    )
+                    logger.debug(f"Created member link for primary member {primary_member.member_id}")
+
+            except Exception as e:
+                logger.error(f"Error processing row: {str(e)}", exc_info=True)
+                return JsonResponse({'success': False, 'error': f'Error processing row: {str(e)}'})
+
+        logger.info("Successfully processed uploaded template")
+        return JsonResponse({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error processing upload: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def import_ancrdt_model(request):
+    """View function to import ANCRDT model"""
+    if request.GET.get('execute') == 'true':
+        try:
+            from pybirdai.utils.ancrdt_links_and_filters.ancrdt_importer import RunANCRDTImport
+            RunANCRDTImport.run_ancrdt_importer()
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+
+    return create_response_with_loading(
+        request,
+        'Importing ANCRDT Model (approx 2-3 minutes on a fast desktop, dont press the back button on this web page)',
+        'Successfully imported ANCRDT model',
+        '/pybirdai/bird_diffs_and_corrections',
+        'BIRD Export Diffs and Corrections'
+    )
+
+def create_joins_meta_data_ancrdt(request):
+    """View function to create joins meta data ANCRDT"""
+    if request.GET.get('execute') == 'true':
+        from pybirdai.utils.ancrdt_links_and_filters.create_joins_meta_data_ancrdt import JoinsMetaDataCreatorANCRDT
+        creator = JoinsMetaDataCreatorANCRDT()
+        result = creator.generate_joins_meta_data()
+
+    return create_response_with_loading(
+        request,
+        'Creating Joins Meta Data ANCRDT',
+        'Successfully created joins meta data ANCRDT',
+        '/pybirdai/ancrdt_executable_joins',
+        'Create Executable Joins ANCRDT'
+    )
+
+def create_executable_joins_ancrdt(request):
+    """View function to create executable joins ANCRDT"""
+    if request.GET.get('execute') == 'true':
+        from pybirdai.utils.ancrdt_links_and_filters.create_executable_joins_ancrdt import RunCreateExecutableJoins
+        RunCreateExecutableJoins.create_python_joins_from_db()
+
+    return create_response_with_loading(
+        request,
+        'Creating Executable Joins ANCRDT',
+        'Successfully created executable joins ANCRDT',
+        '/pybirdai/next_step',
+        'Proceed to Next Step'
+    )
+
+def anacredit_transformation_results_endpoint(request):
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+    results : dict = {}
+    return JsonResponse({'success': False, 'results': results})
+
+@require_http_methods(["GET", "POST"])
+def edit_view_file(request):
+    if request.method == 'POST':
+        # Get the uploaded file
+        uploaded_file = request.FILES['file_path']
+
+        # You can then use the uploaded_file as needed
+        # For example, you could save it to a model
+        # my_model = MyModel(file=uploaded_file)
+        # my_model.save()
+
+        return HttpResponse("File uploaded successfully.")
+    else:
+        return render(request, 'utils/edit_view_file.html')
+
+@require_http_methods(["GET", "POST"])
+def save_to_file(request):
+    if request.method == 'POST':
+        # Get the data to be saved
+        data = request.POST.get('content')
+        file_path = request.POST.get('file_path')
+
+        # Save the data to the file
+        with open(file_path, 'w') as f:
+            f.write(data)
+
+        return HttpResponse("Data saved to file successfully.")
+    else:
+        return render(request, 'utils/edit_view_file.html')

@@ -1,0 +1,2 @@
+MAINTENANCE_AGENCY_ID,FRAMEWORK_ID,NAME,CODE,DESCRIPTION,FRAMEWORK_TYPE,REPORTING_POPULATION,OTHER_LINKS,ORDER,FRAMEWORK_STATUS
+ECB,ANCRDT,AnaCredit,ANCRDT,"AnaCredit is a dataset containing detailed information on individual bank loans in the euro area, harmonised across all Member States. “AnaCredit” stands for analytical credit datasets.",,,,1000,PUBLISHED

@@ -20,7 +20,7 @@ class SDDContext(object):
     # variables to configure the behaviour
 
     use_codes = True
-    
+
     # the directory where we get our input files
     file_directory = ""
     # the directory where we save our outputs.
@@ -42,11 +42,13 @@ class SDDContext(object):
     bird_cube_structure_item_dictionary = {}
     bird_cube_structure_dictionary = {}
 
+
+
     combination_dictionary = {}
     combination_item_dictionary = {}
     combination_to_rol_cube_map = {}
 
-    
+
     axis_ordinate_dictionary= {}
     table_cell_dictionary= {}
     table_to_table_cell_dictionary= {}
@@ -76,7 +78,7 @@ class SDDContext(object):
     table_to_combination_dictionary = {}
 
 
-    
+
      # For the reference output layers we record a map between members ids
     # andtheir containing domains
     member_id_to_domain_map = {}
@@ -84,7 +86,7 @@ class SDDContext(object):
     # For the reference output layers we record a map between members ids
     # and their codes
     member_id_to_member_code_map = {}
-    
+
     variable_set_to_variable_map = {}
 
     axis_ordinate_to_ordinate_items_map = {}
@@ -102,6 +104,10 @@ class SDDContext(object):
     save_sdd_to_db = True
 
     exclude_reference_info_from_website = False
+
+    cube_dictionary = {}
+    cube_structure_item_dictionary = {}
+    cube_structure_dictionary = {}
 
     def __init__(self):
 
