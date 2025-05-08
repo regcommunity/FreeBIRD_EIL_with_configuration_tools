@@ -2984,30 +2984,12 @@ def anacredit_transformation_results_endpoint(request):
 
 @require_http_methods(["GET", "POST"])
 def edit_view_file(request):
+    context = {}
     if request.method == 'POST':
         # Get the uploaded file
-        uploaded_file = request.FILES['file_path']
+        context = {
+            "file_content" : request.FILES['file_path'].read().decode(),
+            "file_path" : request.FILES['file_path']
+        }
 
-        # You can then use the uploaded_file as needed
-        # For example, you could save it to a model
-        # my_model = MyModel(file=uploaded_file)
-        # my_model.save()
-
-        return HttpResponse("File uploaded successfully.")
-    else:
-        return render(request, 'utils/edit_view_file.html')
-
-@require_http_methods(["GET", "POST"])
-def save_to_file(request):
-    if request.method == 'POST':
-        # Get the data to be saved
-        data = request.POST.get('content')
-        file_path = request.POST.get('file_path')
-
-        # Save the data to the file
-        with open(file_path, 'w') as f:
-            f.write(data)
-
-        return HttpResponse("Data saved to file successfully.")
-    else:
-        return render(request, 'utils/edit_view_file.html')
+    return render(request, 'utils/edit_view_file.html',context=context)

@@ -132,6 +132,5 @@ urlpatterns = [
     path('import_ancrdt_model/', views.import_ancrdt_model, name='import_ancrdt_model'),
     path('create_joins_meta_data_ancrdt/', views.create_joins_meta_data_ancrdt, name='create_joins_meta_data_ancrdt'),
     path('create_executable_joins_ancrdt/', views.create_executable_joins_ancrdt, name='create_executable_joins_ancrdt'),
-    path('edit_view_file/', views.edit_view_file, name='edit_view_file'),
-    path('save_to_file/', views.save_to_file, name='save_to_file')
+    path('edit_view_file/', views.edit_view_file, name='edit_view_file')
 ]
