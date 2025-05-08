@@ -2987,9 +2987,11 @@ def edit_view_file(request):
     context = {}
     if request.method == 'POST':
         # Get the uploaded file
-        context = {
-            "file_content" : request.FILES['file_path'].read().decode(),
-            "file_path" : request.FILES['file_path']
-        }
+        if "file_path" in request.FILES:
+            print(request.FILES['file_path'].name)
+            context = {
+                "file_content" : request.FILES['file_path'].read().decode(),
+                "file_name" : request.FILES['file_path'].name
+            }
 
     return render(request, 'utils/edit_view_file.html',context=context)
