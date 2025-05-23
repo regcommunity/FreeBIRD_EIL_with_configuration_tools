@@ -1,0 +1,594 @@
+<!--
+# Copyright (c) 2024 Bird Software Solutions Ltd
+# This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License 2.0
+# which accompanies this distribution, and is available at
+# https://www.eclipse.org/legal/epl-2.0/
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+# Contributors:
+#    Neil Mackenzie - initial API and implementation
+-->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Edit Member Links</h1>
+<a href="{% url 'pybirdai:edit_cube_structure_item_links' %}">Back to Edit Cube Structure Item Links</a>
+
+<!-- Modify the filters div -->
+<div class="filters">
+    <form id="filterForm">
+        <label for="csiLinkFilter">Cube Structure Item Link:</label>
+        <select id="csiLinkFilter" name="csi_link_id">
+            <option value="">All</option>
+            {% for link_id in cube_structure_item_links %}
+            <option value="{{ link_id }}" {% if selected_link_id == link_id %}selected{% endif %}>{{ link_id }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit" class="filter-button">Apply Filters</button>
+        <button type="button" onclick="clearFilters()" class="clear-button">Clear Filters</button>
+    </form>
+</div>
+
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<!-- Add New Link Button -->
+<div class="add-new-section">
+    <button type="button" onclick="showAddForm()" class="add-button">Add New Member Link</button>
+    <button type="button" onclick="downloadTemplate()" class="download-button">Download Template</button>
+    <button type="button" onclick="document.getElementById('uploadFile').click()" class="upload-button">Upload Template</button>
+    <input type="file" id="uploadFile" accept=".csv" style="display: none;" onchange="uploadTemplate()">
+</div>
+
+<!-- Add New Member Link Form (Hidden by default) -->
+<div id="addMemberLinkForm" class="add-form" style="display: none;">
+    <form method="post" action="{% url 'pybirdai:add_member_link' %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="member_link_id">Member Link ID:</label>
+            <input type="text" name="member_link_id" id="member_link_id" readonly required>
+        </div>
+        <div class="form-group">
+            <input type="hidden" name="cube_structure_item_link_id" value="{{ selected_link_id }}">
+        </div>
+        <div class="form-group">
+            <label for="primary_member_id">Primary Member:</label>
+            <select name="primary_member_id" id="primary_member_id" required {% if not selected_link_id %}disabled{% endif %} onchange="updateMemberLinkId()">
+                {% if not selected_link_id %}
+                    <option value="">Please select a CSI Link first</option>
+                {% else %}
+                    {% for member in primary_members %}
+                    <option value="{{ member.member_id }}">{{ member.member_id }} - {{ member.member_name }}</option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="foreign_member_id">Foreign Member:</label>
+            <select name="foreign_member_id" id="foreign_member_id" required {% if not selected_link_id %}disabled{% endif %} onchange="updateMemberLinkId()">
+                {% if not selected_link_id %}
+                    <option value="">Please select a CSI Link first</option>
+                {% else %}
+                    {% for member in foreign_members %}
+                    <option value="{{ member.member_id }}">{{ member.member_id }} - {{ member.member_name }}</option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="valid_from">Valid From:</label>
+            <input type="date" name="valid_from" id="valid_from">
+        </div>
+        <div class="form-group">
+            <label for="valid_to">Valid To:</label>
+            <input type="date" name="valid_to" id="valid_to">
+        </div>
+        <div class="form-group">
+            <label for="is_linked">Is Linked:</label>
+            <input type="checkbox" name="is_linked" id="is_linked" value="true">
+        </div>
+        <button type="submit" class="submit-button">Create Member Link</button>
+        <button type="button" onclick="hideAddForm()" class="cancel-button">Cancel</button>
+    </form>
+</div>
+<!-- Display Variable Information -->
+{% if selected_link_id %}
+<div class="variable-info">
+    <div class="info-section">
+        <h3>Link Information</h3>
+        <div class="info-row">
+            <div class="info-col">
+                <h4>Primary Variable</h4>
+                <p><strong>Variable ID:</strong> {{ primary_variable.variable_id.variable_id }}</p>
+                <p><strong>Member Count:</strong> {{ primary_members|length }}</p>
+            </div>
+            <div class="info-col">
+                <h4>Foreign Variable</h4>
+                <p><strong>Variable ID:</strong> {{ foreign_variable.variable_id.variable_id }}</p>
+                <p><strong>Member Count:</strong> {{ foreign_members|length }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Member Link ID</th>
+                    <th>CSI Link ID</th>
+                    <th>Primary Member ID</th>
+                    <th>Foreign Member ID</th>
+                    <th>Primary Member Name</th>
+                    <th>Foreign Member Name</th>
+                    <th>Valid From</th>
+                    <th>Valid To</th>
+                    <th>Is Linked</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                {% for link in member_links %}
+                <tr>
+                    <td>{{ link.member_link_id }}</td>
+                    <td>{{ link.cube_structure_item_link_id.cube_structure_item_link_id }}</td>
+                    <td>{{ link.primary_member_id.member_id }}</td>
+                    <td>{{ link.foreign_member_id.member_id }}</td>
+                    <td>{{ link.primary_member_id.member_name }}</td>
+                    <td>{{ link.foreign_member_id.member_name }}</td>
+                    <td>{{ link.valid_from|date:"Y-m-d" }}</td>
+                    <td>{{ link.valid_to|date:"Y-m-d" }}</td>
+                    <td>
+                        <span class="status-badge {% if link.is_linked %}linked{% else %}unlinked{% endif %}">
+                            {{ link.is_linked|yesno:"Yes,No" }}
+                        </span>
+                    </td>
+                    <td>
+                        <button type="button" onclick="confirmDelete('{{ link.member_link_id }}')">Delete</button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        {% if selected_link_id %}
+                            No member links found for this cube structure item link.
+                        {% else %}
+                            Please select a Cube Structure Item Link to view member links.
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if member_links %}
+    <button type="submit">Save Changes</button>
+    {% endif %}
+</form>
+
+<!-- Pagination -->
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; first</a>
+            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+
+<!-- Add this CSS -->
+<style>
+    .variable-info {
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        border-left: 4px solid #007bff;
+    }
+
+    .info-section h3 {
+        margin-top: 0;
+        color: #495057;
+    }
+
+    .info-row {
+        display: flex;
+        gap: 30px;
+        margin-top: 15px;
+    }
+
+    .info-col {
+        flex: 1;
+    }
+
+    .info-col h4 {
+        margin-bottom: 10px;
+        color: #6c757d;
+        font-size: 1.1em;
+    }
+
+    .info-col p {
+        margin: 5px 0;
+        font-size: 0.95em;
+    }
+
+    .filters {
+        margin: 20px 0;
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .filters form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        align-items: flex-end;
+    }
+
+    .filters label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .filters select {
+        padding: 6px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        min-width: 200px;
+    }
+
+    .filter-button, .clear-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .filter-button {
+        background-color: #007bff;
+        color: white;
+    }
+
+    .clear-button {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .filter-button:hover {
+        background-color: #0056b3;
+    }
+
+    .clear-button:hover {
+        background-color: #5a6268;
+    }
+
+    .add-new-section {
+        margin: 20px 0;
+        display: flex;
+        gap: 10px;
+    }
+
+    .add-button, .download-button, .upload-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .add-button {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .download-button {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .upload-button {
+        background-color: #ffc107;
+        color: black;
+    }
+
+    .add-button:hover {
+        background-color: #218838;
+    }
+
+    .download-button:hover {
+        background-color: #138496;
+    }
+
+    .upload-button:hover {
+        background-color: #e0a800;
+    }
+
+    .add-form {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 5px;
+        margin: 20px 0;
+        max-width: 600px;
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+    }
+
+    .form-group input[type="checkbox"] {
+        width: auto;
+        margin-right: 5px;
+    }
+
+    .submit-button {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+
+    .cancel-button {
+        background-color: #6c757d;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .submit-button:hover {
+        background-color: #0056b3;
+    }
+
+    .cancel-button:hover {
+        background-color: #5a6268;
+    }
+
+    .status-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.875em;
+        font-weight: bold;
+    }
+
+    .status-badge.linked {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .status-badge.unlinked {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        margin-bottom: 1em;
+    }
+    
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 1000px;
+    }
+    
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    
+    th {
+        background-color: #f2f2f2;
+        position: sticky;
+        top: 0;
+    }
+    
+    .pagination {
+        margin-top: 20px;
+    }
+
+    .messages {
+        list-style: none;
+        padding: 0;
+    }
+
+    .messages li {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+
+    .messages li.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .messages li.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .messages li.warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+</style>
+
+<!-- Filter form JavaScript -->
+<script>
+document.getElementById('filterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    // Build the query string
+    const params = new URLSearchParams();
+    const csiLink = document.getElementById('csiLinkFilter').value;
+
+    if (csiLink) params.append('csi_link_id', csiLink);
+
+    // Redirect with the filters
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
+});
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
+</script>
+
+<!-- Delete confirmation JavaScript -->
+<script>
+function confirmDelete(memberLinkId) {
+    if (confirm('Are you sure you want to delete this member link?')) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{% url 'pybirdai:delete_member_link' %}";
+        form.member_link_id = memberLinkId
+        var csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+
+<!-- Add/Update form JavaScript -->
+<script>
+    function showAddForm() {
+        document.getElementById('addMemberLinkForm').style.display = 'block';
+        updateMemberLinkId(); // Initialize the ID when form is shown
+    }
+
+    function hideAddForm() {
+        document.getElementById('addMemberLinkForm').style.display = 'none';
+    }
+
+    function updateMemberLinkId() {
+        const csiLinkId = "{{ selected_link_id }}";
+        const primarySelect = document.getElementById('primary_member_id');
+        const foreignSelect = document.getElementById('foreign_member_id');
+
+        let primaryMemberId = '';
+        let foreignMemberId = '';
+
+        if (primarySelect.value) {
+            primaryMemberId = primarySelect.value;
+        }
+
+        if (foreignSelect.value) {
+            foreignMemberId = foreignSelect.value;
+        }
+
+        // Generate a unique ID based on the pattern
+        const linkId = [csiLinkId, primaryMemberId, foreignMemberId]
+            .filter(Boolean)  // Remove empty values
+            .join(':');
+
+        document.getElementById('member_link_id').value = linkId;
+    }
+
+    // Template download function
+    function downloadTemplate() {
+        const csiLinkId = "{{ selected_link_id }}";
+        if (!csiLinkId) {
+            alert('Please select a Cube Structure Item Link first');
+            return;
+        }
+        
+        window.open(`{% url 'pybirdai:download_member_link_template' %}?csi_link_id=${csiLinkId}`, '_blank');
+    }
+
+    // Template upload function
+    function uploadTemplate() {
+        const fileInput = document.getElementById('uploadFile');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            return;
+        }
+        
+        if (!file.name.endsWith('.csv')) {
+            alert('Please select a CSV file');
+            return;
+        }
+        
+        const csiLinkId = "{{ selected_link_id }}";
+        if (!csiLinkId) {
+            alert('Please select a Cube Structure Item Link first');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('csi_link_id', csiLinkId);
+        
+        fetch('{% url "pybirdai:upload_member_link_template" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Template uploaded successfully!');
+                location.reload();
+            } else {
+                alert('Error uploading template: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            alert('Network error: ' + error.message);
+        });
+        
+        // Clear the file input
+        fileInput.value = '';
+    }
+</script>
+{% endblock %}
