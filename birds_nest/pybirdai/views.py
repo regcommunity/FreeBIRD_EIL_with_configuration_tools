@@ -27,7 +27,7 @@ from .bird_meta_data_model import (
 import json
 from . import bird_meta_data_model
 from .entry_points.import_input_model import RunImportInputModelFromSQLDev
-
+import urllib.parse
 from .entry_points.import_report_templates_from_website import RunImportReportTemplatesFromWebsite
 from .entry_points.import_semantic_integrations_from_website import RunImportSemanticIntegrationsFromWebsite
 from .entry_points.import_hierarchy_analysis_from_website import RunImportHierarchiesFromWebsite
@@ -2737,15 +2737,22 @@ def add_member_link(request):
         return JsonResponse({'success': False, 'error': 'Invalid request method'})
 
     try:
-        data = json.loads(request.body)
-        logger.debug(f"Received data for new member link: {data}")
-        csi_link_id = data.get('csi_link_id')
+
+        decoded_body = urllib.parse.unquote_plus(request.body.decode())
+        print(decoded_body)
+        data = {}
+        for item in decoded_body.split('&'):
+            key, value = item.split('=')
+            data[key] = value
+
+        csi_link_id = data.get('cube_structure_item_link_id')
         primary_member_id = data.get('primary_member_id')
         foreign_member_id = data.get('foreign_member_id')
         valid_from = data.get('valid_from')
         valid_to = data.get('valid_to')
-        is_linked = data.get('is_linked')
+        is_linked = json.loads(data.get('is_linked',"false"))
 
+        print(csi_link_id)
         logger.debug(f"Looking up CSI link: {csi_link_id}")
         csi_link = CUBE_STRUCTURE_ITEM_LINK.objects.get(cube_structure_item_link_id=csi_link_id)
         logger.debug(f"Looking up primary member: {primary_member_id}")
@@ -2763,7 +2770,7 @@ def add_member_link(request):
         )
         logger.info(f"Successfully created member link with ID: {member_link.id}")
 
-        return JsonResponse({'success': True, 'member_link_id': member_link.id})
+        return redirect(request.META.get('HTTP_REFERER'))
 
     except Exception as e:
         logger.error(f"Error creating member link: {str(e)}", exc_info=True)
@@ -2777,7 +2784,13 @@ def delete_member_link(request):
         return JsonResponse({'success': False, 'error': 'Invalid request method'})
 
     try:
-        data = json.loads(request.body)
+        decoded_body = urllib.parse.unquote_plus(request.body.decode())
+        print(decoded_body)
+        data = {}
+        for item in decoded_body.split('&'):
+            key, value = item.split('=')
+            data[key] = value
+
         member_link_id = data.get('member_link_id')
         logger.debug(f"Attempting to delete member link with ID: {member_link_id}")
 
@@ -2785,7 +2798,7 @@ def delete_member_link(request):
         member_link.delete()
         logger.info(f"Successfully deleted member link with ID: {member_link_id}")
 
-        return JsonResponse({'success': True})
+        return redirect(request.META.get('HTTP_REFERER'))
 
     except Exception as e:
         logger.error(f"Error deleting member link: {str(e)}", exc_info=True)
@@ -2799,11 +2812,11 @@ def edit_member_link(request):
         return JsonResponse({'success': False, 'error': 'Invalid request method'})
 
     try:
-        data = json.loads(request.body)
+        data = json.loads(request.body.decode('utf-8'))
         logger.debug(f"Received data for member link edit: {data}")
-        member_link_id = data.get('member_link_id')
-        primary_member_id = data.get('primary_member_id')
-        foreign_member_id = data.get('foreign_member_id')
+        member_link_id = data.get('member_link_id',"")
+        primary_member_id = data.get('primary_member_id',"")
+        foreign_member_id = data.get('foreign_member_id',"")
 
         logger.debug(f"Looking up member link with ID: {member_link_id}")
         member_link = MEMBER_LINK.objects.get(id=member_link_id)
@@ -2821,12 +2834,11 @@ def edit_member_link(request):
         member_link.save()
         logger.info(f"Successfully updated member link with ID: {member_link_id}")
 
-        return JsonResponse({'success': True})
+        return JsonResponse({'success': True, 'redirect_url': request.META.get('HTTP_REFERER')})
 
     except Exception as e:
         logger.error(f"Error editing member link: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)})
-
 
 def download_member_link_template(request):
     """View function for downloading member link template."""
@@ -2842,6 +2854,20 @@ def download_member_link_template(request):
         # Create CSV content with header row
         headers = ['Primary Member ID', 'Foreign Member ID', 'Valid From', 'Valid To', 'Is Linked']
         csv_content = [','.join(headers)]
+
+        # Create CSV content with data
+        if csi_link_id:
+            csi_link = CUBE_STRUCTURE_ITEM_LINK.objects.get(cube_structure_item_link_id=csi_link_id)
+            member_links = MEMBER_LINK.objects.filter(cube_structure_item_link_id=csi_link)
+
+            for link in member_links:
+                csv_content.append(','.join([
+                    link.primary_member_id.member_id if link.primary_member_id else '',
+                    link.foreign_member_id.member_id if link.foreign_member_id else '',
+                    link.valid_from.strftime('%d/%m/%y') if link.valid_from else '',
+                    link.valid_to.strftime('%d/%m/%y') if link.valid_to else '',
+                    'TRUE' if link.is_linked else 'FALSE'
+                ]))
 
         # Create response with CSV file
         response = HttpResponse(content_type='text/csv')

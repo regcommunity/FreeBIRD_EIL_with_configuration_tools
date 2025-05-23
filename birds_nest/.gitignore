@@ -30,3 +30,4 @@
 *.lock
 __pycache__/
 *.html
+uv.lock
