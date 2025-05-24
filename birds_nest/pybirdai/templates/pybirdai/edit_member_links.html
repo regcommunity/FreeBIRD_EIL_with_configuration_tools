@@ -99,26 +99,6 @@
         <button type="button" onclick="hideAddForm()" class="cancel-button">Cancel</button>
     </form>
 </div>
-<!-- Display Variable Information -->
-{% if selected_link_id %}
-<div class="variable-info">
-    <div class="info-section">
-        <h3>Link Information</h3>
-        <div class="info-row">
-            <div class="info-col">
-                <h4>Primary Variable</h4>
-                <p><strong>Variable ID:</strong> {{ primary_variable.variable_id.variable_id }}</p>
-                <p><strong>Member Count:</strong> {{ primary_members|length }}</p>
-            </div>
-            <div class="info-col">
-                <h4>Foreign Variable</h4>
-                <p><strong>Variable ID:</strong> {{ foreign_variable.variable_id.variable_id }}</p>
-                <p><strong>Member Count:</strong> {{ foreign_members|length }}</p>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <form method="post">
     {% csrf_token %}
