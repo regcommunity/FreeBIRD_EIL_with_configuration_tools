@@ -30,3 +30,6 @@
 *.lock
 __pycache__/
 *.html
+*.csv
+*.log
+*.log.*
