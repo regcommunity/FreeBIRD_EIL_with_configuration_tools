@@ -33,3 +33,4 @@ __pycache__/
 *.csv
 *.log
 *.log.*
+birds_nest/results/generated_python_joins/*
