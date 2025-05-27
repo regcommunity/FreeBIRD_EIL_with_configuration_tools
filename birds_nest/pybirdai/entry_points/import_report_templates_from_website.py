@@ -41,7 +41,8 @@ class RunImportReportTemplatesFromWebsite(AppConfig):
         sdd_context = SDDContext()
         sdd_context.file_directory = os.path.join(base_dir, 'resources')
         sdd_context.output_directory = os.path.join(base_dir, 'results')
-        
+        sdd_context.save_sdd_to_db = True
+
         context = Context()
         context.file_directory = sdd_context.file_directory
         context.output_directory = sdd_context.output_directory

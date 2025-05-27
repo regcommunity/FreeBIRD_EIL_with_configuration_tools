@@ -30,3 +30,7 @@
 *.lock
 __pycache__/
 *.html
+*.csv
+*.log
+*.log.*
+birds_nest/results/generated_python_joins/*
